@@ -8,7 +8,9 @@ import gtemp.gtemp_io.service.UserService;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = "*")
+//@CrossOrigin(origins = "http://localhost:5173")
+
 public class UserController {
 
     private final UserService userService;
