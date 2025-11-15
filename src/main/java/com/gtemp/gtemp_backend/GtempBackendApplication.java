@@ -1,13 +1,13 @@
-package com.gtempio.gtemp;
+package com.gtemp.gtemp_backend;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class GtempApplication {
+public class GtempBackendApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(GtempApplication.class, args);
+		SpringApplication.run(GtempBackendApplication.class, args);
 	}
 
 }

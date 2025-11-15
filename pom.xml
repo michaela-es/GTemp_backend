@@ -9,9 +9,9 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.gtemp</groupId>
-	<artifactId>gtemp</artifactId>
+	<artifactId>gtemp-backend</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>gtemp</name>
+	<name>gtemp-backend</name>
 	<description>Demo project for Spring Boot</description>
 	<url/>
 	<licenses>
