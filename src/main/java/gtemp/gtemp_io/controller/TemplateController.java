@@ -18,9 +18,11 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/templates")
+@CrossOrigin(origins = "http://localhost:5173")
 public class TemplateController {
 
     @Autowired
@@ -32,34 +34,35 @@ public class TemplateController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> createTemplate(
-            @RequestPart("template") String templateJson,  // Use @RequestPart for JSON
+            @RequestPart("template") String templateJson,
             @RequestPart(value = "coverImage", required = false) MultipartFile coverImage,
             @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @RequestPart(value = "files", required = false) List<MultipartFile> files) {
 
         try {
-            System.out.println("=== USING @RequestPart ===");
-            System.out.println("Raw JSON received: " + templateJson);
-            System.out.println("Cover image present: " + (coverImage != null));
-
-            // Parse JSON
             objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
             Template template = objectMapper.readValue(templateJson, Template.class);
 
-            // Debug
-            System.out.println("Template title: " + template.getTemplateTitle());
-            System.out.println("Template engine: " + template.getEngine());
-
-            // Handle cover image
             if (coverImage != null && !coverImage.isEmpty()) {
-                String coverImagePath = "uploads/" + coverImage.getOriginalFilename();
-                Files.createDirectories(Paths.get("uploads/"));
-                Files.copy(coverImage.getInputStream(), Paths.get(coverImagePath));
-                template.setCoverImagePath(coverImagePath);
-                System.out.println("✓ Cover image saved: " + coverImagePath);
+                String uploadsDir = "uploads/";
+
+                Files.createDirectories(Paths.get(uploadsDir));
+
+                String fileName = System.currentTimeMillis() + "_" +
+                        coverImage.getOriginalFilename().replace(" ", "_");
+                String fullFilePath = uploadsDir + fileName;
+
+                Files.copy(coverImage.getInputStream(), Paths.get(fullFilePath));
+
+                template.setCoverImagePath("uploads/" + fileName);
+
+                System.out.println("✓ File saved to: " + fullFilePath);
+                System.out.println("✓ Web path: uploads/" + fileName);
+
+                boolean fileExists = Files.exists(Paths.get(fullFilePath));
+                System.out.println("✓ File exists: " + fileExists);
             }
 
-            // Save template
             Template savedTemplate = templateService.createTemplate(template, coverImage, images, files);
 
             Map<String, Object> response = new HashMap<>();
@@ -76,6 +79,48 @@ public class TemplateController {
         }
     }
 
+    @GetMapping("/debug-uploads")
+    public ResponseEntity<Map<String, Object>> debugUploads() {
+        Map<String, Object> debugInfo = new HashMap<>();
+
+        try {
+            String projectRoot = System.getProperty("user.dir");
+            String uploadsPath = projectRoot + "/uploads/";
+            String relativeUploadsPath = "uploads/";
+
+            debugInfo.put("projectRoot", projectRoot);
+            debugInfo.put("uploadsAbsolutePath", uploadsPath);
+            debugInfo.put("uploadsRelativePath", relativeUploadsPath);
+
+            boolean uploadsDirExists = Files.exists(Paths.get(uploadsPath));
+            boolean relativeUploadsDirExists = Files.exists(Paths.get(relativeUploadsPath));
+
+            debugInfo.put("uploadsAbsoluteExists", uploadsDirExists);
+            debugInfo.put("uploadsRelativeExists", relativeUploadsDirExists);
+
+            if (uploadsDirExists) {
+                List<String> files = Files.list(Paths.get(uploadsPath))
+                        .map(path -> path.getFileName().toString())
+                        .collect(Collectors.toList());
+                debugInfo.put("filesInUploads", files);
+            }
+
+            String testFile = "1763289872903_kim-lip-can-you-entertain.jpg";
+            boolean fileExistsAbsolute = Files.exists(Paths.get(uploadsPath + testFile));
+            boolean fileExistsRelative = Files.exists(Paths.get(relativeUploadsPath + testFile));
+
+            debugInfo.put("testFile", testFile);
+            debugInfo.put("fileExistsAbsolute", fileExistsAbsolute);
+            debugInfo.put("fileExistsRelative", fileExistsRelative);
+
+            System.out.println("Debug uploads info: " + debugInfo);
+
+        } catch (Exception e) {
+            debugInfo.put("error", e.getMessage());
+        }
+
+        return ResponseEntity.ok(debugInfo);
+    }
 
 //    @GetMapping
 //    public ResponseEntity<List<Template>> getAllTemplates() {
@@ -92,5 +137,44 @@ public class TemplateController {
 //        templateService.deleteTemplate(id);
 //        return ResponseEntity.noContent().build();
 //    }
+
+    @GetMapping
+    public ResponseEntity<List<Template>> getAllTemplates() {
+        try {
+            List<Template> templates = templateService.getAllTemplates();
+            return ResponseEntity.ok(templates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getTemplateById(@PathVariable Long id) {
+        try {
+            System.out.println("=== GET /api/templates/" + id + " called ===");
+
+            Optional<Template> templateOpt = templateService.getTemplateById(id);
+
+            if (templateOpt.isEmpty()) {
+                System.out.println("Template not found with id: " + id);
+                Map<String, String> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Template not found with id: " + id);
+                return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+            }
+
+            Template template = templateOpt.get();
+            System.out.println("Found template: " + template.getTemplateTitle());
+            System.out.println("Cover image path: " + template.getCoverImagePath());
+
+            return ResponseEntity.ok(template);
+
+        } catch (Exception e) {
+            System.err.println("Error fetching template: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to fetch template: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
 
 }

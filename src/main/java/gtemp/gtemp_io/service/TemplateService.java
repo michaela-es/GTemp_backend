@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class TemplateService {
@@ -96,5 +97,32 @@ public class TemplateService {
         }
 
         return filePath;
+    }
+
+    public List<Template> getAllTemplates() {
+        try {
+            return templateRepository.findByVisibilityTrue();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to retrieve templates: " + e.getMessage(), e);
+        }
+    }
+
+    public Optional<Template> getTemplateById(Long id) {
+        try {
+            System.out.println("Service: Looking for template with ID: " + id);
+            Optional<Template> template = templateRepository.findById(id);
+
+            if (template.isPresent()) {
+                System.out.println("Service: Found template - " + template.get().getTemplateTitle());
+            } else {
+                System.out.println("Service: No template found with ID: " + id);
+            }
+
+            return template;
+        } catch (Exception e) {
+            System.err.println("Error in getTemplateById: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
     }
 }

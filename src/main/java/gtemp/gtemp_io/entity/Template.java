@@ -12,28 +12,70 @@ public class Template {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @JoinColumn(name = "templateid")
+    @Column(name = "templateid")
     private Long id;
 
+    @Column(name = "template_title")
     private String templateTitle;
+
+    @Column(name = "template_desc")
     private String templateDesc;
+
+    @Column(name = "price")
     private Float price;
+
+    @Column(name = "visibility")
     private Boolean visibility;
+
+    @Column(name = "engine")
     private String engine;
+
+    @Column(name = "type")
     private String type;
 
+    @Column(name = "category")
+    private String category;
+
+    @Column(name = "genre")
+    private String genre;
+
+    @Column(name = "template_owner")
+    private Long templateOwner;
+
+    @Column(name = "template_img")
+    private String templateImg;
+
+    @Column(name = "template_rating")
+    private Double templateRating;
+
+    @Column(name = "release_date")
     private LocalDateTime releaseDate;
+
+    @Column(name = "update_date")
     private LocalDateTime updateDate;
+
+    @Column(name = "cover_image_path")
     private String coverImagePath;
 
+    @Column(name = "views")
     private Integer views = 0;
+
+    @Column(name = "downloads")
     private Integer downloads = 0;
+
+    @Column(name = "rating")
     private Float rating = 0.0f;
 
-    // ADDED: Missing fields from your JSON
+    @Column(name = "average_rating")
     private Float averageRating = 0.0f;
+
+    @Column(name = "wishlist_count")
     private Integer wishlistCount = 0;
+
+    @Column(name = "is_wishlisted")
     private Boolean isWishlisted = false;
+
+    @Column(name = "revenue")
     private Float revenue = 0.0f;
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -45,6 +87,7 @@ public class Template {
     private List<File> files = new ArrayList<>();
 
     public Template() {}
+
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -67,6 +110,21 @@ public class Template {
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
 
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getGenre() { return genre; }
+    public void setGenre(String genre) { this.genre = genre; }
+
+    public Long getTemplateOwner() { return templateOwner; }
+    public void setTemplateOwner(Long templateOwner) { this.templateOwner = templateOwner; }
+
+    public String getTemplateImg() { return templateImg; }
+    public void setTemplateImg(String templateImg) { this.templateImg = templateImg; }
+
+    public Double getTemplateRating() { return templateRating; }
+    public void setTemplateRating(Double templateRating) { this.templateRating = templateRating; }
+
     public LocalDateTime getReleaseDate() { return releaseDate; }
     public void setReleaseDate(LocalDateTime releaseDate) { this.releaseDate = releaseDate; }
 
@@ -85,7 +143,6 @@ public class Template {
     public Float getRating() { return rating; }
     public void setRating(Float rating) { this.rating = rating; }
 
-    // ADDED: Getters and setters for new fields
     public Float getAverageRating() { return averageRating; }
     public void setAverageRating(Float averageRating) { this.averageRating = averageRating; }
 
@@ -104,7 +161,6 @@ public class Template {
     public List<File> getFiles() { return files; }
     public void setFiles(List<File> files) { this.files = files; }
 
-    // Helper methods
     public void addImage(TemplateImage image) {
         images.add(image);
         image.setTemplate(this);

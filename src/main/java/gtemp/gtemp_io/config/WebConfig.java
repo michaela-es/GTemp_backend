@@ -1,23 +1,23 @@
 package gtemp.gtemp_io.config;
 
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
-public class WebConfig {
+public class WebConfig implements WebMvcConfigurer {
 
-    @Bean
-    public WebMvcConfigurer corsConfigurer() {
-        return new WebMvcConfigurer() {
-            @Override
-            public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/**")
-                        .allowedOrigins("*")
-                        .allowedHeaders("Origin", "X-Requested-With", "Content-Type", "Accept")
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS");
-            }
-        };
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        // For development - serve from both absolute path and content root
+        String projectRoot = System.getProperty("user.dir");
+        String uploadsAbsolutePath = "file:" + projectRoot + "/";
+
+        System.out.println("Configuring static resources from project root: " + projectRoot);
+        System.out.println("Uploads should be at: " + uploadsAbsolutePath + "uploads/");
+
+        // This will serve files from /uploads/ relative to your project root
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations("file:./uploads/", "file:uploads/", uploadsAbsolutePath + "uploads/");
     }
 }
