@@ -4,36 +4,49 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.UUID;
 
 @Service
 public class FileStorageService {
 
-    private final Path fileStorageLocation = Paths.get("uploads").toAbsolutePath().normalize();
+    private final Path rootDir = Paths.get("uploads").toAbsolutePath().normalize();
 
     public FileStorageService() {
         try {
-            Files.createDirectories(this.fileStorageLocation);
-        } catch (Exception ex) {
-            throw new RuntimeException("Could not create the directory where the uploaded files will be stored.", ex);
+            Files.createDirectories(rootDir);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not initialize upload folder", e);
+        }
+    }
+
+    public String saveCoverImage(MultipartFile file, Long templateId) {
+        return saveFileToFolder(file, "covers/template_" + templateId);
+    }
+
+    public String saveTemplateImage(MultipartFile file, Long templateId) {
+        return saveFileToFolder(file, "images/template_" + templateId);
+    }
+
+    public String saveTemplateFile(MultipartFile file, Long templateId) {
+        return saveFileToFolder(file, "files/template_" + templateId);
+    }
+
+    private String saveFileToFolder(MultipartFile file, String subfolder) {
+        try {
+            Path folderPath = rootDir.resolve(subfolder).normalize();
+            Files.createDirectories(folderPath);
+            String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+            Path targetLocation = folderPath.resolve(fileName);
+            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+            return subfolder + "/" + fileName;
+        } catch (IOException e) {
+            throw new RuntimeException("Error saving file to " + subfolder, e);
         }
     }
 
     public String storeFile(MultipartFile file) {
-        // Normalize file name
-        String fileName = UUID.randomUUID().toString() + "_" + file.getOriginalFilename();
-
-        try {
-            // Copy file to the target location (Replacing existing file with the same name)
-            Path targetLocation = this.fileStorageLocation.resolve(fileName);
-            Files.copy(file.getInputStream(), targetLocation);
-
-            return fileName;
-        } catch (IOException ex) {
-            throw new RuntimeException("Could not store file " + fileName + ". Please try again!", ex);
-        }
+        return saveFileToFolder(file, "uploads");
     }
+
 }
