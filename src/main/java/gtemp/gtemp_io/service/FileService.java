@@ -1,6 +1,5 @@
 package gtemp.gtemp_io.service;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -13,53 +12,55 @@ import java.util.UUID;
 @Service
 public class FileService {
 
-    @Value("${file.upload-dir:uploads}")
-    private String uploadDir;
+    private final String STORAGE_DIR = "uploads";
 
-    public String storeFile(MultipartFile file) throws IOException {
-        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
-        Files.createDirectories(uploadPath);
-
-        String originalFileName = file.getOriginalFilename();
-        String fileExtension = "";
-        if (originalFileName != null && originalFileName.contains(".")) {
-            fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
-        }
-
-        String storedFileName = UUID.randomUUID().toString() + fileExtension;
-        Path targetLocation = uploadPath.resolve(storedFileName);
-
-        Files.copy(file.getInputStream(), targetLocation);
-
-        return storedFileName;
+    public String saveCoverImage(MultipartFile file, Long templateId) throws IOException {
+        return saveFile(file, "covers", templateId);
     }
 
-    public byte[] loadFile(String filename) throws IOException {
-        Path filePath = Paths.get(uploadDir).resolve(filename).normalize();
-        if (!Files.exists(filePath)) {
-            throw new RuntimeException("File not found: " + filename);
-        }
-        return Files.readAllBytes(filePath);
+    public String saveTemplateImage(MultipartFile file, Long templateId) throws IOException {
+        return saveFile(file, "images", templateId);
     }
 
-    public void deleteFile(String filename) throws IOException {
-        Path filePath = Paths.get(uploadDir).resolve(filename).normalize();
-        Files.deleteIfExists(filePath);
+    public String saveTemplateFile(MultipartFile file, Long templateId) throws IOException {
+        return saveFile(file, "template_files", templateId);
     }
 
-    public String getFileExtension(String filename) {
-        if (filename == null || !filename.contains(".")) {
-            return "";
+    private String saveFile(MultipartFile file, String subDir, Long templateId) throws IOException {
+        // If templateId is null, just use subDir
+        Path dirPath = templateId != null
+                ? Paths.get(STORAGE_DIR, subDir, "template_" + templateId)
+                : Paths.get(STORAGE_DIR, subDir, "temp");
+
+        // Create directories if they do not exist
+        Files.createDirectories(dirPath);
+
+        // Use UUID to avoid filename conflicts
+        String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
+        Path filePath = dirPath.resolve(filename);
+
+        // Save the file
+        file.transferTo(filePath.toFile());
+
+        // Return relative path (e.g., "uploads/covers/template_1/uuid_file.png")
+        return STORAGE_DIR + "/" + subDir + "/" + (templateId != null ? "template_" + templateId : "temp") + "/" + filename;
+    }
+
+    public void deleteFile(String path) throws IOException {
+        if (path != null && !path.isEmpty()) {
+            Files.deleteIfExists(Paths.get(path));
         }
-        return filename.substring(filename.lastIndexOf("."));
     }
 
     public boolean isImageFile(MultipartFile file) {
-        String contentType = file.getContentType();
-        return contentType != null && contentType.startsWith("image/");
+        return file.getContentType() != null && file.getContentType().startsWith("image/");
     }
 
-    public boolean isFileSizeValid(MultipartFile file, long maxSizeInBytes) {
-        return file.getSize() <= maxSizeInBytes;
+    public boolean isFileSizeValid(MultipartFile file, long maxSize) {
+        return file != null && file.getSize() <= maxSize;
+    }
+
+    public byte[] loadFile(String path) throws IOException {
+        return path != null ? Files.readAllBytes(Paths.get(path)) : new byte[0];
     }
 }

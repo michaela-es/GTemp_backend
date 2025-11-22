@@ -1,11 +1,13 @@
 package gtemp.gtemp_io.controller;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import gtemp.gtemp_io.entity.Template;
+import gtemp.gtemp_io.entity.TemplateImage;
+import gtemp.gtemp_io.repository.TemplateRepository;
 import gtemp.gtemp_io.service.TemplateService;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -15,9 +17,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/templates")
@@ -27,145 +29,147 @@ public class TemplateController {
     @Autowired
     private TemplateService templateService;
 
+
+    @Autowired
+    private TemplateRepository templateRepository;
+
     @Autowired
     private ObjectMapper objectMapper;
 
-    private final String UPLOAD_DIR = "uploads/";
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> createTemplate(
-            @RequestParam("template") String templateJson,
-            @RequestParam(value = "files", required = false) List<MultipartFile> files) {
-
-        try {
-            Template template = objectMapper.readValue(templateJson, Template.class);
-            Template savedTemplate = templateService.createTemplate(template, files);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Template created successfully");
-            response.put("templateId", savedTemplate.getId());
-            response.put("templateTitle", savedTemplate.getTemplateTitle());
-
-            return new ResponseEntity<>(response, HttpStatus.CREATED);
-        } catch (JsonProcessingException e) {
-            return new ResponseEntity<>(null, HttpStatus.BAD_REQUEST);
-        }
-    }
-    @GetMapping
-    public ResponseEntity<List<Template>> getAllTemplates() {
-        List<Template> templates = templateService.getAllTemplates();
-        return new ResponseEntity<>(templates, HttpStatus.OK);
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<Template> getTemplateById(@PathVariable Long id) {
-        try {
-            Template template = templateService.getTemplateById(id);
-            return new ResponseEntity<>(template, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
-        }
-    }
-
-    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Template> updateTemplate(
-            @PathVariable Long id,
-            @RequestPart("template") Template templateDetails,
+            @RequestPart("template") String templateJson,
+            @RequestPart(value = "coverImage", required = false) MultipartFile coverImage,
+            @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @RequestPart(value = "files", required = false) List<MultipartFile> files) {
 
         try {
-            if (files != null) {
-                for (MultipartFile multipartFile : files) {
-                    String filePath = UPLOAD_DIR + multipartFile.getOriginalFilename();
-                    Files.createDirectories(Paths.get(UPLOAD_DIR));
-                    Files.copy(multipartFile.getInputStream(), Paths.get(filePath));
+            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            Template template = objectMapper.readValue(templateJson, Template.class);
 
-                    gtemp.gtemp_io.entity.File fileEntity = new gtemp.gtemp_io.entity.File();
-                    fileEntity.setFilePath(filePath);
-                    fileEntity.setTemplate(templateDetails);
+            if (coverImage != null && !coverImage.isEmpty()) {
+                String uploadsDir = "uploads/";
 
-                    templateDetails.addFile(fileEntity);
-                }
+                Files.createDirectories(Paths.get(uploadsDir));
+
+                String fileName = System.currentTimeMillis() + "_" +
+                        coverImage.getOriginalFilename().replace(" ", "_");
+                String fullFilePath = uploadsDir + fileName;
+
+                Files.copy(coverImage.getInputStream(), Paths.get(fullFilePath));
+
+                template.setCoverImagePath("uploads/" + fileName);
+
+                System.out.println("✓ File saved to: " + fullFilePath);
+                System.out.println("✓ Web path: uploads/" + fileName);
+
+                boolean fileExists = Files.exists(Paths.get(fullFilePath));
+                System.out.println("✓ File exists: " + fileExists);
             }
 
-            Template updatedTemplate = templateService.updateTemplate(id, templateDetails, null);
+            Template savedTemplate = templateService.createTemplate(template, coverImage, images, files);
 
-            return new ResponseEntity<>(updatedTemplate, HttpStatus.OK);
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Template created successfully!");
+            response.put("templateId", savedTemplate.getId());
 
-        } catch (IOException e) {
+            return new ResponseEntity<>(response, HttpStatus.CREATED);
+
+        } catch (Exception e) {
             e.printStackTrace();
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed: " + e.getMessage());
+            return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
         }
     }
 
+    @GetMapping("/debug-uploads")
+    public ResponseEntity<Map<String, Object>> debugUploads() {
+        Map<String, Object> debugInfo = new HashMap<>();
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteTemplate(@PathVariable Long id) {
         try {
-            templateService.deleteTemplate(id);
-            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            String projectRoot = System.getProperty("user.dir");
+            String uploadsPath = projectRoot + "/uploads/";
+            String relativeUploadsPath = "uploads/";
+
+            debugInfo.put("projectRoot", projectRoot);
+            debugInfo.put("uploadsAbsolutePath", uploadsPath);
+            debugInfo.put("uploadsRelativePath", relativeUploadsPath);
+
+            boolean uploadsDirExists = Files.exists(Paths.get(uploadsPath));
+            boolean relativeUploadsDirExists = Files.exists(Paths.get(relativeUploadsPath));
+
+            debugInfo.put("uploadsAbsoluteExists", uploadsDirExists);
+            debugInfo.put("uploadsRelativeExists", relativeUploadsDirExists);
+
+            if (uploadsDirExists) {
+                List<String> files = Files.list(Paths.get(uploadsPath))
+                        .map(path -> path.getFileName().toString())
+                        .collect(Collectors.toList());
+                debugInfo.put("filesInUploads", files);
+            }
+
+            String testFile = "1763289872903_kim-lip-can-you-entertain.jpg";
+            boolean fileExistsAbsolute = Files.exists(Paths.get(uploadsPath + testFile));
+            boolean fileExistsRelative = Files.exists(Paths.get(relativeUploadsPath + testFile));
+
+            debugInfo.put("testFile", testFile);
+            debugInfo.put("fileExistsAbsolute", fileExistsAbsolute);
+            debugInfo.put("fileExistsRelative", fileExistsRelative);
+
+            System.out.println("Debug uploads info: " + debugInfo);
+
+        } catch (Exception e) {
+            debugInfo.put("error", e.getMessage());
         }
+
+        return ResponseEntity.ok(debugInfo);
     }
 
-    @GetMapping("/files/{filename:.+}")
-    public ResponseEntity<byte[]> downloadFile(@PathVariable String filename) {
+    @PostMapping("/batch")
+    public ResponseEntity<List<Template>> getTemplatesByIds(@RequestBody List<Long> templateIds) {
+        List<Template> templates = templateRepository.findAllById(templateIds);
+        return ResponseEntity.ok(templates);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Template>> getAllTemplates() {
         try {
-            byte[] fileContent = Files.readAllBytes(Paths.get(UPLOAD_DIR + filename));
-
-            String contentType = Files.probeContentType(Paths.get(UPLOAD_DIR + filename));
-            if (contentType == null) contentType = "application/octet-stream";
-
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(contentType))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                    .body(fileContent);
-        } catch (IOException e) {
-            return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
+            List<Template> templates = templateService.getAllTemplates();
+            return ResponseEntity.ok(templates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
-    @GetMapping("/public")
-    public ResponseEntity<List<Template>> getVisibleTemplates() {
-        return new ResponseEntity<>(templateService.getVisibleTemplates(), HttpStatus.OK);
-    }
-
-    @PostMapping("/{id}/view")
-    public ResponseEntity<Void> incrementViews(@PathVariable Long id) {
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getTemplateById(@PathVariable Long id) {
         try {
-            Template template = templateService.getTemplateById(id);
-            template.setViews(template.getViews() + 1);
-            templateService.updateTemplate(id, template, null);
-            return new ResponseEntity<>(HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            System.out.println("=== GET /api/templates/" + id + " called ===");
+
+            Optional<Template> templateOpt = templateService.getTemplateById(id);
+
+            if (templateOpt.isEmpty()) {
+                System.out.println("Template not found with id: " + id);
+                Map<String, String> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Template not found with id: " + id);
+                return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+            }
+
+            Template template = templateOpt.get();
+            System.out.println("Found template: " + template.getTemplateTitle());
+            System.out.println("Cover image path: " + template.getCoverImagePath());
+
+            return ResponseEntity.ok(template);
+
+        } catch (Exception e) {
+            System.err.println("Error fetching template: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to fetch template: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
-    @PostMapping("/{id}/rate")
-    public ResponseEntity<Template> rateTemplate(@PathVariable Long id, @RequestParam float rating) {
-        try {
-            Template template = templateService.getTemplateById(id);
-            template.setRating(rating);
-            Template updatedTemplate = templateService.updateTemplate(id, template, null);
-            return new ResponseEntity<>(updatedTemplate, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
-        }
-    }
-
-    @PostMapping("/{id}/download")
-    public ResponseEntity<Void> incrementDownloads(@PathVariable Long id) {
-        try {
-            Template template = templateService.getTemplateById(id);
-            template.setDownloads(template.getDownloads() + 1);
-            templateService.updateTemplate(id, template, null);
-            return new ResponseEntity<>(HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-    }
 }

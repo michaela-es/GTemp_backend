@@ -1,58 +1,31 @@
 package gtemp.gtemp_io.entity;
-import com.fasterxml.jackson.annotation.JsonManagedReference;
+
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 @Entity
-@Table(name = "Template")
+@Table(name = "templates")
 public class Template {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "template_id")
-    private Long templateID;
+    @Column(name = "templateid")
+    private Long id;
 
-    @Column(name = "template_title", nullable = false)
+    @Column(name = "template_title")
     private String templateTitle;
 
-    @Column(name = "price")
-    private float price;
-
-    @Column(name = "template_desc", length = 1000)
+    @Column(name = "template_desc")
     private String templateDesc;
 
-    @Column(name = "release_date")
-    private LocalDateTime releaseDate;
-
-    @Column(name = "update_date")
-    private LocalDateTime updateDate;
-
-    @Column(name = "views")
-    private int views;
-
-    @Column(name = "rating")
-    private float rating;
-
-    @Column(name = "average_rating")
-    private float averageRating;
-
-    @Column(name = "downloads")
-    private int downloads;
+    @Column(name = "price")
+    private Float price;
 
     @Column(name = "visibility")
-    private boolean visibility;
-
-    @Column(name = "wishlist_count")
-    private int wishlistCount;
-
-    @Column(name = "is_wishlisted")
-    private boolean isWishlisted;
-
-    @Column(name = "revenue")
-    private float revenue;
+    private Boolean visibility;
 
     @Column(name = "engine")
     private String engine;
@@ -60,200 +33,151 @@ public class Template {
     @Column(name = "type")
     private String type;
 
-    @Column(name = "template_image_path")
-    private String templateImagePath;
+    @Column(name = "category")
+    private String category;
 
-    public Template() {
-    }
+    @Column(name = "genre")
+    private String genre;
 
-    public Template(String templateTitle, float price, String templateDesc, LocalDateTime releaseDate,
-                    LocalDateTime updateDate, int views, float rating, float averageRating, int downloads,
-                    boolean visibility, int wishlistCount, boolean isWishlisted, float revenue,
-                    String engine, String type, String templateImagePath) {
-        this.templateTitle = templateTitle;
-        this.price = price;
-        this.templateDesc = templateDesc;
-        this.releaseDate = releaseDate;
-        this.updateDate = updateDate;
-        this.views = views;
-        this.rating = rating;
-        this.averageRating = averageRating;
-        this.downloads = downloads;
-        this.visibility = visibility;
-        this.wishlistCount = wishlistCount;
-        this.isWishlisted = isWishlisted;
-        this.revenue = revenue;
-        this.engine = engine;
-        this.type = type;
-        this.templateImagePath = templateImagePath;
-    }
+    @Column(name = "template_owner")
+    private Long templateOwner;
 
-    public Long getId() {
-        return templateID;
-    }
+    @Column(name = "template_img")
+    private String templateImg;
 
-    public void setTemplateID(Long templateID) {
-        this.templateID = templateID;
-    }
+    @Column(name = "template_rating")
+    private Double templateRating;
 
-    public String getTemplateTitle() {
-        return templateTitle;
-    }
+    @Column(name = "release_date")
+    private LocalDateTime releaseDate;
 
-    public void setTemplateTitle(String templateTitle) {
-        this.templateTitle = templateTitle;
-    }
+    @Column(name = "update_date")
+    private LocalDateTime updateDate;
 
-    public float getPrice() {
-        return price;
-    }
+    @Column(name = "cover_image_path")
+    private String coverImagePath;
 
-    public void setPrice(float price) {
-        this.price = price;
-    }
+    @Column(name = "views")
+    private Integer views = 0;
 
-    public String getTemplateDesc() {
-        return templateDesc;
-    }
+    @Column(name = "downloads")
+    private Integer downloads = 0;
 
-    public void setTemplateDesc(String templateDesc) {
-        this.templateDesc = templateDesc;
-    }
+    @Column(name = "rating")
+    private Float rating = 0.0f;
 
-    public LocalDateTime getReleaseDate() {
-        return releaseDate;
-    }
+    @Column(name = "average_rating")
+    private Float averageRating = 0.0f;
 
-    public void setReleaseDate(LocalDateTime releaseDate) {
-        this.releaseDate = releaseDate;
-    }
+    @Column(name = "wishlist_count")
+    private Integer wishlistCount = 0;
 
-    public LocalDateTime getUpdateDate() {
-        return updateDate;
-    }
+    @Column(name = "is_wishlisted")
+    private Boolean isWishlisted = false;
 
-    public void setUpdateDate(LocalDateTime updateDate) {
-        this.updateDate = updateDate;
-    }
+    @Column(name = "revenue")
+    private Float revenue = 0.0f;
 
-    public int getViews() {
-        return views;
-    }
-
-    public void setViews(int views) {
-        this.views = views;
-    }
-
-    public float getRating() {
-        return rating;
-    }
-
-    public void setRating(float rating) {
-        this.rating = rating;
-    }
-
-    public float getAverageRating() {
-        return averageRating;
-    }
-
-    public void setAverageRating(float averageRating) {
-        this.averageRating = averageRating;
-    }
-
-    public int getDownloads() {
-        return downloads;
-    }
-
-    public void setDownloads(int downloads) {
-        this.downloads = downloads;
-    }
-
-    public boolean isVisibility() {
-        return visibility;
-    }
-
-    public void setVisibility(boolean visibility) {
-        this.visibility = visibility;
-    }
-
-    public int getWishlistCount() {
-        return wishlistCount;
-    }
-
-    public void addFile(File file) {
-        if (this.files == null) {
-            this.files = new ArrayList<>();
-        }
-        this.files.add(file);
-        file.setTemplate(this);
-    }
-
-    public void setWishlistCount(int wishlistCount) {
-        this.wishlistCount = wishlistCount;
-    }
-
-    public boolean isWishlisted() {
-        return isWishlisted;
-    }
-
-    public void setWishlisted(boolean isWishlisted) {
-        this.isWishlisted = isWishlisted;
-    }
-
-    public float getRevenue() {
-        return revenue;
-    }
-
-    public void setRevenue(float revenue) {
-        this.revenue = revenue;
-    }
-
-    public String getEngine() {
-        return engine;
-    }
-
-    public void setEngine(String engine) {
-        this.engine = engine;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public String getTemplateImagePath() {
-        return templateImagePath;
-    }
-
-    public void setTemplateImagePath(String templateImagePath) {
-        this.templateImagePath = templateImagePath;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof Template)) return false;
-        Template template = (Template) o;
-        return Objects.equals(templateID, template.templateID);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(templateID);
-    }
+    @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
+    private List<TemplateImage> images = new ArrayList<>();
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     private List<File> files = new ArrayList<>();
 
-    public List<File> getFiles() {
-        return files;
+    public Template() {}
+
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+
+    public String getTemplateTitle() { return templateTitle; }
+    public void setTemplateTitle(String templateTitle) { this.templateTitle = templateTitle; }
+
+    public String getTemplateDesc() { return templateDesc; }
+    public void setTemplateDesc(String templateDesc) { this.templateDesc = templateDesc; }
+
+    public Float getPrice() { return price; }
+    public void setPrice(Float price) { this.price = price; }
+
+    public Boolean getVisibility() { return visibility; }
+    public void setVisibility(Boolean visibility) { this.visibility = visibility; }
+
+    public String getEngine() { return engine; }
+    public void setEngine(String engine) { this.engine = engine; }
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getGenre() { return genre; }
+    public void setGenre(String genre) { this.genre = genre; }
+
+    public Long getTemplateOwner() { return templateOwner; }
+    public void setTemplateOwner(Long templateOwner) { this.templateOwner = templateOwner; }
+
+    public String getTemplateImg() { return templateImg; }
+    public void setTemplateImg(String templateImg) { this.templateImg = templateImg; }
+
+    public Double getTemplateRating() { return templateRating; }
+    public void setTemplateRating(Double templateRating) { this.templateRating = templateRating; }
+
+    public LocalDateTime getReleaseDate() { return releaseDate; }
+    public void setReleaseDate(LocalDateTime releaseDate) { this.releaseDate = releaseDate; }
+
+    public LocalDateTime getUpdateDate() { return updateDate; }
+    public void setUpdateDate(LocalDateTime updateDate) { this.updateDate = updateDate; }
+
+    public String getCoverImagePath() { return coverImagePath; }
+    public void setCoverImagePath(String coverImagePath) { this.coverImagePath = coverImagePath; }
+
+    public Integer getViews() { return views; }
+    public void setViews(Integer views) { this.views = views; }
+
+    public Integer getDownloads() { return downloads; }
+    public void setDownloads(Integer downloads) { this.downloads = downloads; }
+
+    public Float getRating() { return rating; }
+    public void setRating(Float rating) { this.rating = rating; }
+
+    public Float getAverageRating() { return averageRating; }
+    public void setAverageRating(Float averageRating) { this.averageRating = averageRating; }
+
+    public Integer getWishlistCount() { return wishlistCount; }
+    public void setWishlistCount(Integer wishlistCount) { this.wishlistCount = wishlistCount; }
+
+    public Boolean getIsWishlisted() { return isWishlisted; }
+    public void setIsWishlisted(Boolean isWishlisted) { this.isWishlisted = isWishlisted; }
+
+    public Float getRevenue() { return revenue; }
+    public void setRevenue(Float revenue) { this.revenue = revenue; }
+
+    public List<TemplateImage> getImages() { return images; }
+    public void setImages(List<TemplateImage> images) { this.images = images; }
+
+    public List<File> getFiles() { return files; }
+    public void setFiles(List<File> files) { this.files = files; }
+
+    public void addImage(TemplateImage image) {
+        images.add(image);
+        image.setTemplate(this);
     }
 
-    public void setFiles(List<File> files) {
-        this.files = files;
+    public void removeImage(TemplateImage image) {
+        images.remove(image);
+        image.setTemplate(null);
+    }
+
+    public void addFile(File file) {
+        files.add(file);
+        file.setTemplate(this);
+    }
+
+    public void removeFile(File file) {
+        files.remove(file);
+        file.setTemplate(null);
     }
 }

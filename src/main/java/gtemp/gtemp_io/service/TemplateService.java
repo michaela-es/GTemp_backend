@@ -1,18 +1,21 @@
 package gtemp.gtemp_io.service;
 
-import gtemp.gtemp_io.entity.Template;
 import gtemp.gtemp_io.entity.File;
-import gtemp.gtemp_io.repository.TemplateRepository;
+import gtemp.gtemp_io.entity.Template;
+import gtemp.gtemp_io.entity.TemplateImage;
 import gtemp.gtemp_io.repository.FileRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import gtemp.gtemp_io.repository.TemplateImageRepository;
+import gtemp.gtemp_io.repository.TemplateRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class TemplateService {
@@ -24,139 +27,102 @@ public class TemplateService {
     private FileRepository fileRepository;
 
     @Autowired
-    private FileService fileService;
+    private TemplateImageRepository templateImageRepository;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+    // Folder where files/images will be saved
+    private final String uploadDir = "uploads/";
 
-    public Template createTemplate(Template template, List<MultipartFile> files) {
-        template.setReleaseDate(LocalDateTime.now());
-        template.setUpdateDate(LocalDateTime.now());
+    public Template createTemplate(Template template,
+                                   MultipartFile coverImage,
+                                   List<MultipartFile> images,
+                                   List<MultipartFile> files) throws IOException {
 
-        template.setViews(0);
-        template.setRating(0);
-        template.setAverageRating(0);
-        template.setDownloads(0);
-        template.setWishlistCount(0);
-        template.setWishlisted(false);
-        template.setRevenue(0);
+        // Ensure lists are not null
+        images = images != null ? images : List.of();
+        files = files != null ? files : List.of();
 
-        if (files != null && !files.isEmpty()) {
-            for (MultipartFile file : files) {
-                try {
-                    String storedFileName = fileService.storeFile(file);
+        // 1️⃣ Save cover image
+        if (coverImage != null && !coverImage.isEmpty()) {
+            String coverImagePath = saveFileToDisk(coverImage);
+            template.setCoverImagePath(coverImagePath);
+        }
 
-                    File fileEntity = new File();
-                    fileEntity.setFileName(file.getOriginalFilename());
-                    fileEntity.setFilePath(storedFileName);
-                    fileEntity.setFileType(file.getContentType());
-                    fileEntity.setFileSize(file.getSize());
-                    fileEntity.setTemplate(template);
+        // 2️⃣ Save template first
+        Template savedTemplate = templateRepository.save(template);
 
-                    template.getFiles().add(fileEntity);
-                } catch (IOException e) {
-                    throw new RuntimeException("Failed to store file: " + file.getOriginalFilename(), e);
-                }
+        // 3️⃣ Save additional images
+        for (MultipartFile imageFile : images) {
+            if (imageFile != null && !imageFile.isEmpty()) {
+                String imagePath = saveFileToDisk(imageFile);
+
+                TemplateImage templateImage = new TemplateImage();
+                templateImage.setFileName(imageFile.getOriginalFilename());
+                templateImage.setFilePath(imagePath);
+                templateImage.setFileType(imageFile.getContentType());
+                templateImage.setFileSize(imageFile.getSize());
+
+                savedTemplate.addImage(templateImage); // sets template and adds to list
             }
         }
 
-        return templateRepository.save(template);
-    }
+        // 4️⃣ Save additional files
+        for (MultipartFile fileMultipart : files) {
+            if (fileMultipart != null && !fileMultipart.isEmpty()) {
+                String filePath = saveFileToDisk(fileMultipart);
 
-    public Template updateTemplate(Long id, Template templateDetails, List<MultipartFile> newFiles) {
-        Template existingTemplate = templateRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Template not found with id: " + id));
+                File fileEntity = new File();
+                fileEntity.setFileName(fileMultipart.getOriginalFilename());
+                fileEntity.setFilePath(filePath);
+                fileEntity.setFileType(fileMultipart.getContentType());
+                fileEntity.setFileSize(fileMultipart.getSize());
 
-        existingTemplate.setTemplateTitle(templateDetails.getTemplateTitle());
-        existingTemplate.setPrice(templateDetails.getPrice());
-        existingTemplate.setTemplateDesc(templateDetails.getTemplateDesc());
-        existingTemplate.setVisibility(templateDetails.isVisibility());
-        existingTemplate.setEngine(templateDetails.getEngine());
-        existingTemplate.setType(templateDetails.getType());
-        existingTemplate.setTemplateImagePath(templateDetails.getTemplateImagePath());
-
-        existingTemplate.setUpdateDate(LocalDateTime.now());
-
-        if (newFiles != null && !newFiles.isEmpty()) {
-            List<File> additionalFiles = uploadFiles(newFiles, existingTemplate);
-            existingTemplate.getFiles().addAll(additionalFiles);
+                savedTemplate.addFile(fileEntity); // sets template and adds to list
+            }
         }
 
-        return templateRepository.save(existingTemplate);
+        // 5️⃣ Save everything
+        return templateRepository.save(savedTemplate);
+    }
+
+
+    // Utility method to save files to disk
+    private String saveFileToDisk(MultipartFile multipartFile) throws IOException {
+        String filePath = Paths.get(uploadDir, System.currentTimeMillis() + "_" + multipartFile.getOriginalFilename()).toString();
+
+        java.io.File file = new java.io.File(filePath);
+        file.getParentFile().mkdirs(); // ensure directories exist
+
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write(multipartFile.getBytes());
+        }
+
+        return filePath;
     }
 
     public List<Template> getAllTemplates() {
-        return templateRepository.findAll();
+        try {
+            return templateRepository.findByVisibilityTrue();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to retrieve templates: " + e.getMessage(), e);
+        }
     }
 
-    public Template getTemplateById(Long id) {
-        return templateRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Template not found with id: " + id));
-    }
+    public Optional<Template> getTemplateById(Long id) {
+        try {
+            System.out.println("Service: Looking for template with ID: " + id);
+            Optional<Template> template = templateRepository.findById(id);
 
-    public void deleteTemplate(Long id) {
-        Template template = templateRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Template not found with id: " + id));
-
-        deleteTemplateFiles(template);
-
-        templateRepository.delete(template);
-    }
-
-    public List<Template> getVisibleTemplates() {
-        return templateRepository.findAll().stream()
-                .filter(Template::isVisibility)
-                .toList();
-    }
-
-    private List<File> uploadFiles(List<MultipartFile> files, Template template) {
-        List<File> fileEntities = new ArrayList<>();
-
-        for (MultipartFile file : files) {
-            try {
-                String storedFileName = fileService.storeFile(file);
-
-                File fileEntity = new File();
-                fileEntity.setFileName(file.getOriginalFilename());
-                fileEntity.setFilePath(storedFileName);
-                fileEntity.setFileType(file.getContentType());
-                fileEntity.setFileSize(file.getSize());
-                fileEntity.setTemplate(template);
-
-                fileEntities.add(fileEntity);
-            } catch (IOException e) {
-                throw new RuntimeException("Failed to store file: " + file.getOriginalFilename(), e);
+            if (template.isPresent()) {
+                System.out.println("Service: Found template - " + template.get().getTemplateTitle());
+            } else {
+                System.out.println("Service: No template found with ID: " + id);
             }
+
+            return template;
+        } catch (Exception e) {
+            System.err.println("Error in getTemplateById: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
         }
-
-        return fileRepository.saveAll(fileEntities);
-    }
-
-    private void deleteTemplateFiles(Template template) {
-        if (template.getFiles() != null) {
-            for (File file : template.getFiles()) {
-                try {
-                    fileService.deleteFile(file.getFilePath());
-                } catch (IOException e) {
-                    System.err.println("Failed to delete file: " + file.getFilePath());
-                }
-            }
-        }
-    }
-
-    public byte[] downloadFile(String filename) throws IOException {
-        return fileService.loadFile(filename);
-    }
-
-    public String uploadTemplateImage(MultipartFile imageFile) throws IOException {
-        if (!fileService.isImageFile(imageFile)) {
-            throw new IllegalArgumentException("File must be an image");
-        }
-
-        if (!fileService.isFileSizeValid(imageFile, 5 * 1024 * 1024)) {
-            throw new IllegalArgumentException("File size too large");
-        }
-
-        return fileService.storeFile(imageFile);
     }
 }
