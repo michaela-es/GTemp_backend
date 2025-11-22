@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import gtemp.gtemp_io.entity.Template;
 import gtemp.gtemp_io.entity.TemplateImage;
+import gtemp.gtemp_io.repository.TemplateRepository;
 import gtemp.gtemp_io.service.TemplateService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,10 @@ public class TemplateController {
 
     @Autowired
     private TemplateService templateService;
+
+
+    @Autowired
+    private TemplateRepository templateRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -122,21 +127,11 @@ public class TemplateController {
         return ResponseEntity.ok(debugInfo);
     }
 
-//    @GetMapping
-//    public ResponseEntity<List<Template>> getAllTemplates() {
-//        return ResponseEntity.ok(templateService.getAllTemplates());
-//    }
-//
-//    @GetMapping("/{id}")
-//    public ResponseEntity<Template> getTemplate(@PathVariable Long id) {
-//        return ResponseEntity.ok(templateService.getTemplateById(id));
-//    }
-
-//    @DeleteMapping("/{id}")
-//    public ResponseEntity<Void> deleteTemplate(@PathVariable Long id) {
-//        templateService.deleteTemplate(id);
-//        return ResponseEntity.noContent().build();
-//    }
+    @PostMapping("/batch")
+    public ResponseEntity<List<Template>> getTemplatesByIds(@RequestBody List<Long> templateIds) {
+        List<Template> templates = templateRepository.findAllById(templateIds);
+        return ResponseEntity.ok(templates);
+    }
 
     @GetMapping
     public ResponseEntity<List<Template>> getAllTemplates() {
