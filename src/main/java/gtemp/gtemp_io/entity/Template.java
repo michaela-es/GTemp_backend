@@ -86,6 +86,9 @@ public class Template {
     @JsonManagedReference
     private List<File> files = new ArrayList<>();
 
+    @Column(name = "price_setting")
+    private String priceSetting; // "₱0 or donation", "Paid", "No Payment"
+
     public Template() {}
 
 
@@ -160,6 +163,9 @@ public class Template {
 
     public List<File> getFiles() { return files; }
     public void setFiles(List<File> files) { this.files = files; }
+
+    public String getPriceSetting() { return priceSetting; }
+    public void setPriceSetting(String priceSetting) { this.priceSetting = priceSetting; }
 
     public void addImage(TemplateImage image) {
         images.add(image);

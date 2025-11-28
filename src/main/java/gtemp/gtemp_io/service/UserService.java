@@ -1,9 +1,11 @@
 package gtemp.gtemp_io.service;
 
 import gtemp.gtemp_io.entity.User;
-import org.springframework.stereotype.Service;
 import gtemp.gtemp_io.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+import java.util.Optional;
 
 @Service
 public class UserService {
@@ -17,17 +19,8 @@ public class UserService {
     }
 
     public User createUser(User user) {
-//        if (userRepository.existsByEmail(user.getEmail())) {
-//            throw new RuntimeException("Email already exists");
-//        }
-//
-//        if (userRepository.existsByUsername(user.getUsername())) {
-//            throw new RuntimeException("Username already exists");
-//        }
-
         String encryptedPassword = passwordEncoder.encode(user.getPassword());
         user.setPassword(encryptedPassword);
-
         return userRepository.save(user);
     }
 
@@ -46,5 +39,14 @@ public class UserService {
         }
 
         return user;
+    }
+
+    // --- NEW METHODS ---
+    public Optional<User> getUserById(Long id) {
+        return userRepository.findById(id);
+    }
+
+    public User saveUser(User user) {
+        return userRepository.save(user);
     }
 }

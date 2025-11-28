@@ -5,6 +5,7 @@ import gtemp.gtemp_io.entity.User;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import gtemp.gtemp_io.service.UserService;
+import gtemp.gtemp_io.dto.UserResponse;
 
 @RestController
 @RequestMapping("/api")
@@ -28,7 +29,8 @@ public class UserController {
     public ResponseEntity<?> loginUser(@RequestBody LoginRequest loginRequest) {
         try {
             User user = userService.authenticateUser(loginRequest.getUsername(), loginRequest.getPassword());
-            return ResponseEntity.ok(user);
+            UserResponse response = new UserResponse(user.getUsername(), user.getEmail(), user.getWallet());
+            return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             return ResponseEntity.status(401).body(e.getMessage());
         }
