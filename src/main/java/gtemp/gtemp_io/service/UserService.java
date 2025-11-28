@@ -18,16 +18,22 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * Create a new user with encrypted password
+     */
     public User createUser(User user) {
         String encryptedPassword = passwordEncoder.encode(user.getPassword());
         user.setPassword(encryptedPassword);
         return userRepository.save(user);
     }
 
-    public User authenticateUser(String username, String password) {
-        User user = userRepository.findByUsername(username);
+    /**
+     * Authenticate user by username or email and password
+     */
+    public User authenticateUser(String usernameOrEmail, String password) {
+        User user = userRepository.findByUsername(usernameOrEmail);
         if (user == null) {
-            user = userRepository.findByEmail(username);
+            user = userRepository.findByEmail(usernameOrEmail);
         }
 
         if (user == null) {
@@ -41,11 +47,23 @@ public class UserService {
         return user;
     }
 
-    // --- NEW METHODS ---
+    /**
+     * Find user by ID
+     */
     public Optional<User> getUserById(Long id) {
         return userRepository.findById(id);
     }
 
+    /**
+     * Find user by email
+     */
+    public Optional<User> getUserByEmail(String email) {
+        return Optional.ofNullable(userRepository.findByEmail(email));
+    }
+
+    /**
+     * Save or update user
+     */
     public User saveUser(User user) {
         return userRepository.save(user);
     }

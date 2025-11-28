@@ -137,12 +137,12 @@ public class TemplateController {
     @PostMapping("/{id}/purchase")
     public ResponseEntity<?> purchaseTemplate(
             @PathVariable Long id,
-            @RequestParam Long userId,
+            @RequestParam String userEmail, // make sure this is exactly userEmail
             @RequestParam(required = false) Double donationAmount
     ) {
         try {
             Optional<Template> templateOpt = templateService.getTemplateById(id);
-            Optional<User> userOpt = userService.getUserById(userId);
+            Optional<User> userOpt = userService.getUserByEmail(userEmail); // <- email lookup
 
             if (templateOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Template not found");
             if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
@@ -180,6 +180,8 @@ public class TemplateController {
                     .body("Purchase failed: " + e.getMessage());
         }
     }
+
+
 
 
     /** 
