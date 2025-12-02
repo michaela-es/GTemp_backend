@@ -22,7 +22,7 @@ public class TemplateService {
 
     @Autowired
     private TemplateRepository templateRepository;
-
+    
     @Autowired
     private FileRepository fileRepository;
 
@@ -124,5 +124,9 @@ public class TemplateService {
             e.printStackTrace();
             throw e;
         }
+    }
+
+    public Template saveTemplate(Template template) {
+        return templateRepository.save(template);
     }
 }
