@@ -67,7 +67,8 @@ public class Template {
     private Float rating = 0.0f;
 
     @Column(name = "average_rating")
-    private Float averageRating = 0.0f;
+    private Double averageRating;
+
 
     @Column(name = "wishlist_count")
     private Integer wishlistCount = 0;
@@ -146,8 +147,9 @@ public class Template {
     public Float getRating() { return rating; }
     public void setRating(Float rating) { this.rating = rating; }
 
-    public Float getAverageRating() { return averageRating; }
-    public void setAverageRating(Float averageRating) { this.averageRating = averageRating; }
+    public Double getAverageRating() { return averageRating; }
+    public void setAverageRating(Double averageRating) { this.averageRating = averageRating; }
+
 
     public Integer getWishlistCount() { return wishlistCount; }
     public void setWishlistCount(Integer wishlistCount) { this.wishlistCount = wishlistCount; }

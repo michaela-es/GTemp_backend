@@ -135,120 +135,132 @@ public class TemplateController {
 
     @GetMapping("/{id}")
     public ResponseEntity<?> getTemplateById(@PathVariable Long id) {
-        try {
-            Optional<Template> templateOpt = templateService.getTemplateById(id);
-            if (templateOpt.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "Template not found"));
-
-            return ResponseEntity.ok(templateOpt.get());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
-        }
-    }
-
-@PostMapping("/{id}/purchase")
-public ResponseEntity<?> purchaseTemplate(
-        @PathVariable Long id,
-        @RequestParam String userEmail,
-        @RequestParam(required = false) Double donationAmount
-) {
-    try {
         Optional<Template> templateOpt = templateService.getTemplateById(id);
-        Optional<User> userOpt = userService.getUserByEmail(userEmail);
-
-        if (templateOpt.isEmpty())
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Template not found");
-
-        if (userOpt.isEmpty())
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
+        if (templateOpt.isEmpty()) 
+            return ResponseEntity.status(404).body(Map.of("error", "Template not found"));
 
         Template template = templateOpt.get();
-        User user = userOpt.get();
 
-        // Get existing records
-        List<PurchaseDownloadItem> existingItems =
-                purchaseDownloadItemRepository.findByUserAndTemplate(user, template);
+        // compute average on the fly if not saved
+        if (template.getAverageRating() == null) {
+            List<RatingItem> ratings = ratingItemRepository.findAll()
+                .stream()
+                .filter(r -> r.getTemplate().getId().equals(template.getId()))
+                .collect(Collectors.toList());
 
-        // Check if user already purchased or donated
-        Optional<PurchaseDownloadItem> purchasedOrDonated = existingItems.stream()
-                .filter(i -> i.getActionType() == PurchaseDownloadItem.ActionType.PURCHASED
-                          || i.getActionType() == PurchaseDownloadItem.ActionType.DONATED)
-                .findFirst();
+            double avg = ratings.stream().mapToInt(RatingItem::getRatingValue).average().orElse(0.0);
+            template.setAverageRating(avg);
+            templateService.saveTemplate(template); // persist it
+        }
 
-        if (purchasedOrDonated.isPresent()) {
-            // Already purchased or donated
+        return ResponseEntity.ok(template);
+    }
+
+
+
+    @PostMapping("/{id}/purchase")
+    public ResponseEntity<?> purchaseTemplate(
+            @PathVariable Long id,
+            @RequestParam String userEmail,
+            @RequestParam(required = false) Double donationAmount
+    ) {
+        try {
+            Optional<Template> templateOpt = templateService.getTemplateById(id);
+            Optional<User> userOpt = userService.getUserByEmail(userEmail);
+
+            if (templateOpt.isEmpty())
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Template not found");
+
+            if (userOpt.isEmpty())
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
+
+            Template template = templateOpt.get();
+            User user = userOpt.get();
+
+            // Get existing records
+            List<PurchaseDownloadItem> existingItems =
+                    purchaseDownloadItemRepository.findByUserAndTemplate(user, template);
+
+            // Check if user already purchased or donated
+            Optional<PurchaseDownloadItem> purchasedOrDonated = existingItems.stream()
+                    .filter(i -> i.getActionType() == PurchaseDownloadItem.ActionType.PURCHASED
+                            || i.getActionType() == PurchaseDownloadItem.ActionType.DONATED)
+                    .findFirst();
+
+            if (purchasedOrDonated.isPresent()) {
+                // Already purchased or donated
+                return ResponseEntity.ok(Map.of(
+                        "message", "You already own this template. You can download it again.",
+                        "alreadyOwned", true,
+                        "templateId", template.getId()
+                ));
+            }
+
+            // Check if user has a FREE_DOWNLOAD entry
+            Optional<PurchaseDownloadItem> freeDownload = existingItems.stream()
+                    .filter(i -> i.getActionType() == PurchaseDownloadItem.ActionType.FREE_DOWNLOAD)
+                    .findFirst();
+
+            // Determine amount to deduct
+            double amountToDeduct = switch (template.getPriceSetting()) {
+                case "Paid" -> template.getPrice() != null ? template.getPrice() : 0;
+                case "₱0 or donation" -> donationAmount != null ? donationAmount : 0;
+                case "No Payment" -> 0;
+                default -> 0;
+            };
+
+            // Wallet check for Paid / Donation
+            if (user.getWallet() < amountToDeduct && amountToDeduct > 0) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Insufficient wallet balance");
+            }
+
+            // Deduct wallet if needed
+            if (amountToDeduct > 0) {
+                user.setWallet(user.getWallet() - amountToDeduct);
+                userService.saveUser(user);
+                template.setRevenue(template.getRevenue() + (float) amountToDeduct);
+                templateService.saveTemplate(template);
+            }
+
+            // Determine action type
+            PurchaseDownloadItem.ActionType actionType = switch (template.getPriceSetting()) {
+                case "Paid" -> PurchaseDownloadItem.ActionType.PURCHASED;
+                case "₱0 or donation" -> PurchaseDownloadItem.ActionType.DONATED;
+                case "No Payment" -> PurchaseDownloadItem.ActionType.FREE_DOWNLOAD;
+                default -> PurchaseDownloadItem.ActionType.FREE_DOWNLOAD;
+            };
+
+            if (freeDownload.isPresent() && actionType == PurchaseDownloadItem.ActionType.DONATED) {
+                // ✅ Update FREE_DOWNLOAD → DONATED
+                PurchaseDownloadItem item = freeDownload.get();
+                item.setActionType(PurchaseDownloadItem.ActionType.DONATED);
+                item.setAmountPaid(amountToDeduct);
+                item.setActionDate(LocalDateTime.now());
+                purchaseDownloadItemRepository.save(item);
+            } else if (!purchasedOrDonated.isPresent()) {
+                // ✅ Create new record
+                PurchaseDownloadItem item = new PurchaseDownloadItem();
+                item.setUser(user);
+                item.setTemplate(template);
+                item.setActionType(actionType);
+                item.setActionDate(LocalDateTime.now());
+                item.setAmountPaid(amountToDeduct > 0 ? amountToDeduct : null);
+                purchaseDownloadItemRepository.save(item);
+            }
+
             return ResponseEntity.ok(Map.of(
-                    "message", "You already own this template. You can download it again.",
-                    "alreadyOwned", true,
+                    "message", "Purchase / donation successful",
+                    "deductedAmount", amountToDeduct,
                     "templateId", template.getId()
             ));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Purchase failed: " + e.getMessage());
         }
-
-        // Check if user has a FREE_DOWNLOAD entry
-        Optional<PurchaseDownloadItem> freeDownload = existingItems.stream()
-                .filter(i -> i.getActionType() == PurchaseDownloadItem.ActionType.FREE_DOWNLOAD)
-                .findFirst();
-
-        // Determine amount to deduct
-        double amountToDeduct = switch (template.getPriceSetting()) {
-            case "Paid" -> template.getPrice() != null ? template.getPrice() : 0;
-            case "₱0 or donation" -> donationAmount != null ? donationAmount : 0;
-            case "No Payment" -> 0;
-            default -> 0;
-        };
-
-        // Wallet check for Paid / Donation
-        if (user.getWallet() < amountToDeduct && amountToDeduct > 0) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body("Insufficient wallet balance");
-        }
-
-        // Deduct wallet if needed
-        if (amountToDeduct > 0) {
-            user.setWallet(user.getWallet() - amountToDeduct);
-            userService.saveUser(user);
-            template.setRevenue(template.getRevenue() + (float) amountToDeduct);
-            templateService.saveTemplate(template);
-        }
-
-        // Determine action type
-        PurchaseDownloadItem.ActionType actionType = switch (template.getPriceSetting()) {
-            case "Paid" -> PurchaseDownloadItem.ActionType.PURCHASED;
-            case "₱0 or donation" -> PurchaseDownloadItem.ActionType.DONATED;
-            case "No Payment" -> PurchaseDownloadItem.ActionType.FREE_DOWNLOAD;
-            default -> PurchaseDownloadItem.ActionType.FREE_DOWNLOAD;
-        };
-
-        if (freeDownload.isPresent() && actionType == PurchaseDownloadItem.ActionType.DONATED) {
-            // ✅ Update FREE_DOWNLOAD → DONATED
-            PurchaseDownloadItem item = freeDownload.get();
-            item.setActionType(PurchaseDownloadItem.ActionType.DONATED);
-            item.setAmountPaid(amountToDeduct);
-            item.setActionDate(LocalDateTime.now());
-            purchaseDownloadItemRepository.save(item);
-        } else if (!purchasedOrDonated.isPresent()) {
-            // ✅ Create new record
-            PurchaseDownloadItem item = new PurchaseDownloadItem();
-            item.setUser(user);
-            item.setTemplate(template);
-            item.setActionType(actionType);
-            item.setActionDate(LocalDateTime.now());
-            item.setAmountPaid(amountToDeduct > 0 ? amountToDeduct : null);
-            purchaseDownloadItemRepository.save(item);
-        }
-
-        return ResponseEntity.ok(Map.of(
-                "message", "Purchase / donation successful",
-                "deductedAmount", amountToDeduct,
-                "templateId", template.getId()
-        ));
-
-    } catch (Exception e) {
-        e.printStackTrace();
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Purchase failed: " + e.getMessage());
     }
-}
 
 
 
@@ -259,71 +271,71 @@ public ResponseEntity<?> purchaseTemplate(
     /** 
      * New endpoint: download all files for Free template as a single ZIP 
      */
-@GetMapping("/{id}/download/free")
-public ResponseEntity<Resource> downloadFreeTemplate(
-        @PathVariable Long id,
-        @RequestParam String userEmail
-) throws IOException {
+    @GetMapping("/{id}/download/free")
+    public ResponseEntity<Resource> downloadFreeTemplate(
+            @PathVariable Long id,
+            @RequestParam String userEmail
+    ) throws IOException {
 
-    Optional<Template> templateOpt = templateService.getTemplateById(id);
-    Optional<User> userOpt = userService.getUserByEmail(userEmail);
+        Optional<Template> templateOpt = templateService.getTemplateById(id);
+        Optional<User> userOpt = userService.getUserByEmail(userEmail);
 
-    if (templateOpt.isEmpty()) return ResponseEntity.notFound().build();
-    if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        if (templateOpt.isEmpty()) return ResponseEntity.notFound().build();
+        if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
 
-    Template template = templateOpt.get();
-    User user = userOpt.get();
-    List<File> files = template.getFiles();
+        Template template = templateOpt.get();
+        User user = userOpt.get();
+        List<File> files = template.getFiles();
 
-    if (files == null || files.isEmpty()) return ResponseEntity.badRequest().build();
+        if (files == null || files.isEmpty()) return ResponseEntity.badRequest().build();
 
-    List<PurchaseDownloadItem> existingItems =
-            purchaseDownloadItemRepository.findByUserAndTemplate(user, template);
+        List<PurchaseDownloadItem> existingItems =
+                purchaseDownloadItemRepository.findByUserAndTemplate(user, template);
 
-    boolean hasPaid = existingItems.stream()
-            .anyMatch(i -> i.getActionType() == PurchaseDownloadItem.ActionType.PURCHASED
-                        || i.getActionType() == PurchaseDownloadItem.ActionType.DONATED);
+        boolean hasPaid = existingItems.stream()
+                .anyMatch(i -> i.getActionType() == PurchaseDownloadItem.ActionType.PURCHASED
+                            || i.getActionType() == PurchaseDownloadItem.ActionType.DONATED);
 
-    boolean isFree = template.getPriceSetting().equals("No Payment")
-            || template.getPriceSetting().equals("₱0 or donation");
+        boolean isFree = template.getPriceSetting().equals("No Payment")
+                || template.getPriceSetting().equals("₱0 or donation");
 
-    // ✅ Only block if PAID and NOT OWNED
-    if (!hasPaid && !isFree) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(new ByteArrayResource("Payment required".getBytes()));
-    }
-
-    // ✅ Only log FREE_DOWNLOAD if not already owned by payment
-    if (!hasPaid) {
-        PurchaseDownloadItem item = new PurchaseDownloadItem();
-        item.setUser(user);
-        item.setTemplate(template);
-        item.setActionType(PurchaseDownloadItem.ActionType.FREE_DOWNLOAD);
-        item.setActionDate(LocalDateTime.now());
-        item.setAmountPaid(null);
-        purchaseDownloadItemRepository.save(item);
-    }
-
-    // ✅ Create ZIP
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    try (ZipOutputStream zos = new ZipOutputStream(baos)) {
-        for (File file : files) {
-            Path filePath = Paths.get(file.getFilePath());
-            if (!Files.exists(filePath)) continue;
-            zos.putNextEntry(new ZipEntry(filePath.getFileName().toString()));
-            Files.copy(filePath, zos);
-            zos.closeEntry();
+        // ✅ Only block if PAID and NOT OWNED
+        if (!hasPaid && !isFree) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ByteArrayResource("Payment required".getBytes()));
         }
+
+        // ✅ Only log FREE_DOWNLOAD if not already owned by payment
+        if (!hasPaid) {
+            PurchaseDownloadItem item = new PurchaseDownloadItem();
+            item.setUser(user);
+            item.setTemplate(template);
+            item.setActionType(PurchaseDownloadItem.ActionType.FREE_DOWNLOAD);
+            item.setActionDate(LocalDateTime.now());
+            item.setAmountPaid(null);
+            purchaseDownloadItemRepository.save(item);
+        }
+
+        // ✅ Create ZIP
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+            for (File file : files) {
+                Path filePath = Paths.get(file.getFilePath());
+                if (!Files.exists(filePath)) continue;
+                zos.putNextEntry(new ZipEntry(filePath.getFileName().toString()));
+                Files.copy(filePath, zos);
+                zos.closeEntry();
+            }
+        }
+
+        ByteArrayResource resource = new ByteArrayResource(baos.toByteArray());
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + template.getTemplateTitle() + ".zip\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
     }
-
-    ByteArrayResource resource = new ByteArrayResource(baos.toByteArray());
-
-    return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename=\"" + template.getTemplateTitle() + ".zip\"")
-            .contentType(MediaType.APPLICATION_OCTET_STREAM)
-            .body(resource);
-}
 
 
 
@@ -337,83 +349,136 @@ public ResponseEntity<Resource> downloadFreeTemplate(
     }
 
     @PostMapping("/{templateId}/rate")
-public ResponseEntity<?> rateTemplate(
-        @PathVariable Long templateId,
-        @RequestParam String userEmail,
-        @RequestParam Integer ratingValue
-) {
-    try {
+    public ResponseEntity<?> rateTemplate(
+            @PathVariable Long templateId,
+            @RequestParam String userEmail,
+            @RequestParam Integer ratingValue
+    ) {
+        try {
+            Optional<Template> templateOpt = templateService.getTemplateById(templateId);
+            Optional<User> userOpt = userService.getUserByEmail(userEmail);
+
+            if (templateOpt.isEmpty()) return ResponseEntity.status(404).body("Template not found");
+            if (userOpt.isEmpty()) return ResponseEntity.status(404).body("User not found");
+
+            Template template = templateOpt.get();
+            User user = userOpt.get();
+
+            if (ratingValue < 1 || ratingValue > 5)
+                return ResponseEntity.badRequest().body("Rating must be between 1 and 5");
+
+            RatingItem ratingItem = ratingItemRepository.findByUserAndTemplate(user, template)
+                    .orElseGet(RatingItem::new);
+
+            ratingItem.setUser(user);
+            ratingItem.setTemplate(template);
+            ratingItem.setRatingValue(ratingValue);
+            ratingItem.setRatedAt(LocalDateTime.now());
+
+            ratingItemRepository.save(ratingItem);
+
+            // ✅ Recalculate and store average
+            updateTemplateAverageRating(template);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Rating saved successfully",
+                    "ratingValue", ratingValue,
+                    "averageRating", template.getAverageRating()
+            ));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body("Failed to rate template: " + e.getMessage());
+        }
+    }
+
+
+    @GetMapping("/{templateId}/rating")
+    public ResponseEntity<?> getUserRating(
+            @PathVariable Long templateId,
+            @RequestParam String userEmail
+    ) {
         Optional<Template> templateOpt = templateService.getTemplateById(templateId);
         Optional<User> userOpt = userService.getUserByEmail(userEmail);
 
-        if (templateOpt.isEmpty()) return ResponseEntity.status(404).body("Template not found");
-        if (userOpt.isEmpty()) return ResponseEntity.status(404).body("User not found");
+        if (templateOpt.isEmpty() || userOpt.isEmpty()) return ResponseEntity.ok(Map.of("ratingValue", 0));
 
-        Template template = templateOpt.get();
+        Optional<RatingItem> ratingItem = ratingItemRepository.findByUserAndTemplate(userOpt.get(), templateOpt.get());
+        int value = ratingItem.map(RatingItem::getRatingValue).orElse(0);
+
+        return ResponseEntity.ok(Map.of("ratingValue", value));
+    }
+
+    @GetMapping("/user/{email}/rated")
+    public ResponseEntity<List<RatingItem>> getUserRatedTemplates(@PathVariable String email) {
+        Optional<User> userOpt = userService.getUserByEmail(email);
+        if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+
         User user = userOpt.get();
 
-        if (ratingValue < 1 || ratingValue > 5)
-            return ResponseEntity.badRequest().body("Rating must be between 1 and 5");
+        // Fetch all templates
+        List<Template> templates = templateService.getAllTemplates();
 
-        RatingItem ratingItem = ratingItemRepository.findByUserAndTemplate(user, template)
-                .orElseGet(RatingItem::new);
+        List<RatingItem> ratedItems = new ArrayList<>();
 
-        ratingItem.setUser(user);
-        ratingItem.setTemplate(template);
-        ratingItem.setRatingValue(ratingValue);
-        ratingItem.setRatedAt(LocalDateTime.now());
+        for (Template template : templates) {
+            ratingItemRepository.findByUserAndTemplate(user, template)
+                    .ifPresent(ratedItems::add);
+        }
 
-        ratingItemRepository.save(ratingItem);
+        // Optionally sort by ratedAt descending
+        ratedItems.sort((a, b) -> b.getRatedAt().compareTo(a.getRatedAt()));
 
-        return ResponseEntity.ok(Map.of(
-                "message", "Rating saved successfully",
-                "ratingValue", ratingValue
-        ));
-
-    } catch (Exception e) {
-        e.printStackTrace();
-        return ResponseEntity.status(500).body("Failed to rate template: " + e.getMessage());
-    }
-}
-
-@GetMapping("/{templateId}/rating")
-public ResponseEntity<?> getUserRating(
-        @PathVariable Long templateId,
-        @RequestParam String userEmail
-) {
-    Optional<Template> templateOpt = templateService.getTemplateById(templateId);
-    Optional<User> userOpt = userService.getUserByEmail(userEmail);
-
-    if (templateOpt.isEmpty() || userOpt.isEmpty()) return ResponseEntity.ok(Map.of("ratingValue", 0));
-
-    Optional<RatingItem> ratingItem = ratingItemRepository.findByUserAndTemplate(userOpt.get(), templateOpt.get());
-    int value = ratingItem.map(RatingItem::getRatingValue).orElse(0);
-
-    return ResponseEntity.ok(Map.of("ratingValue", value));
-}
-
-@GetMapping("/user/{email}/rated")
-public ResponseEntity<List<RatingItem>> getUserRatedTemplates(@PathVariable String email) {
-    Optional<User> userOpt = userService.getUserByEmail(email);
-    if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-
-    User user = userOpt.get();
-
-    // Fetch all templates
-    List<Template> templates = templateService.getAllTemplates();
-
-    List<RatingItem> ratedItems = new ArrayList<>();
-
-    for (Template template : templates) {
-        ratingItemRepository.findByUserAndTemplate(user, template)
-                .ifPresent(ratedItems::add);
+        return ResponseEntity.ok(ratedItems);
     }
 
-    // Optionally sort by ratedAt descending
-    ratedItems.sort((a, b) -> b.getRatedAt().compareTo(a.getRatedAt()));
+    @GetMapping("/{templateId}/rated-users")
+    public ResponseEntity<List<Map<String, Object>>> getUsersWhoRatedTemplate(@PathVariable Long templateId) {
+        Optional<Template> templateOpt = templateService.getTemplateById(templateId);
+        if (templateOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
 
-    return ResponseEntity.ok(ratedItems);
-}
+        Template template = templateOpt.get();
+
+        // Fetch all ratings for this template
+        List<RatingItem> ratings = ratingItemRepository.findAll()
+                .stream()
+                .filter(r -> r.getTemplate().getId().equals(templateId))
+                .collect(Collectors.toList());
+
+        // Map ratings to a list of simple JSON objects
+        List<Map<String, Object>> result = ratings.stream().map(r -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("userEmail", r.getUser().getEmail());
+            map.put("userName", r.getUser().getUsername());
+            map.put("ratingValue", r.getRatingValue());
+            return map;
+        }).collect(Collectors.toList());
+
+        return ResponseEntity.ok(result);
+    }
+
+
+    private void updateTemplateAverageRating(Template template) {
+        List<RatingItem> ratings = ratingItemRepository.findAll()
+                .stream()
+                .filter(r -> r.getTemplate().getId().equals(template.getId()))
+                .collect(Collectors.toList());
+
+        if (ratings.isEmpty()) {
+            template.setAverageRating(null); // or 0.0
+        } else {
+            double average = ratings.stream()
+                    .mapToInt(RatingItem::getRatingValue)
+                    .average()
+                    .orElse(0.0);
+            template.setAverageRating(average);
+        }
+
+        templateService.saveTemplate(template);
+    }
+
 
 
 
