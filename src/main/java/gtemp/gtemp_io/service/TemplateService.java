@@ -129,4 +129,8 @@ public class TemplateService {
     public Template saveTemplate(Template template) {
         return templateRepository.save(template);
     }
+
+    public List<TemplateImage> getTemplateImages(Long templateId) {
+        return templateImageRepository.findByTemplateId(templateId);
+    }
 }

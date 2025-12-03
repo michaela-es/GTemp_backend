@@ -2,7 +2,6 @@ package gtemp.gtemp_io.entity;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.Objects;
 
 @Entity
@@ -30,8 +29,6 @@ public class File {
     @JsonBackReference
     private Template template;
 
-
-    // Constructors
     public File() {}
 
     public File(String fileName, String filePath, String fileType, Long fileSize, Template template) {
@@ -42,7 +39,6 @@ public class File {
         this.template = template;
     }
 
-    // Getters and setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
