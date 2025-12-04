@@ -90,7 +90,9 @@ public class Template {
     @Column(name = "price_setting")
     private String priceSetting; // "₱0 or donation", "Paid", "No Payment"
 
-    public Template() {}
+    public Template() {
+        this.releaseDate = LocalDateTime.now();
+    }
 
 
     public Long getId() { return id; }

@@ -37,7 +37,7 @@ public class UserController {
     public ResponseEntity<?> loginUser(@RequestBody LoginRequest loginRequest) {
         try {
             User user = userService.authenticateUser(loginRequest.getUsername(), loginRequest.getPassword());
-            UserResponse response = new UserResponse(user.getUsername(), user.getEmail(), user.getWallet());
+            UserResponse response = new UserResponse(user.getUsername(), user.getEmail(), user.getWallet(), user.getUserID());
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             return ResponseEntity.status(401).body(e.getMessage());
