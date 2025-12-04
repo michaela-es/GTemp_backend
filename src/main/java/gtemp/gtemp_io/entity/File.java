@@ -26,7 +26,7 @@ public class File {
     private Long fileSize;
 
     @ManyToOne
-    @JoinColumn(name = "template_id", referencedColumnName = "templateid")
+    @JoinColumn(name = "template_id", referencedColumnName = "templateid", nullable = false)
     @JsonBackReference
     private Template template;
 
