@@ -247,6 +247,72 @@ public class TemplateController {
     /**
      * New endpoint: download all files for Free template as a single ZIP
      */
+//    @GetMapping("/{id}/download/free")
+//    public ResponseEntity<Resource> downloadFreeTemplate(
+//            @PathVariable Long id,
+//            @RequestParam String userEmail
+//    ) throws IOException {
+//
+//        Optional<Template> templateOpt = templateService.getTemplateById(id);
+//        Optional<User> userOpt = userService.getUserByEmail(userEmail);
+//
+//        if (templateOpt.isEmpty()) return ResponseEntity.notFound().build();
+//        if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+//
+//        Template template = templateOpt.get();
+//        User user = userOpt.get();
+//        List<File> files = template.getFiles();
+//
+//        if (files == null || files.isEmpty()) return ResponseEntity.badRequest().build();
+//
+//        List<PurchaseDownloadItem> existingItems =
+//                purchaseDownloadItemRepository.findByUserAndTemplate(user, template);
+//
+//        boolean hasPaid = existingItems.stream()
+//                .anyMatch(i -> i.getActionType() == PurchaseDownloadItem.ActionType.PURCHASED
+//                        || i.getActionType() == PurchaseDownloadItem.ActionType.DONATED);
+//
+//        boolean isFree = template.getPriceSetting().equals("No Payment")
+//                || template.getPriceSetting().equals("₱0 or donation");
+//
+//        // ✅ Only block if PAID and NOT OWNED
+//        if (!hasPaid && !isFree) {
+//            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+//                    .body(new ByteArrayResource("Payment required".getBytes()));
+//        }
+//
+//        // ✅ Only log FREE_DOWNLOAD if not already owned by payment
+//        if (!hasPaid) {
+//            PurchaseDownloadItem item = new PurchaseDownloadItem();
+//            item.setUser(user);
+//            item.setTemplate(template);
+//            item.setActionType(PurchaseDownloadItem.ActionType.FREE_DOWNLOAD);
+//            item.setActionDate(LocalDateTime.now());
+//            item.setAmountPaid(null);
+//            purchaseDownloadItemRepository.save(item);
+//        }
+//
+//        // ✅ Create ZIP
+//        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+//        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+//            for (File file : files) {
+//                Path filePath = Paths.get(file.getFilePath());
+//                if (!Files.exists(filePath)) continue;
+//                zos.putNextEntry(new ZipEntry(filePath.getFileName().toString()));
+//                Files.copy(filePath, zos);
+//                zos.closeEntry();
+//            }
+//        }
+//
+//        ByteArrayResource resource = new ByteArrayResource(baos.toByteArray());
+//
+//        return ResponseEntity.ok()
+//                .header(HttpHeaders.CONTENT_DISPOSITION,
+//                        "attachment; filename=\"" + template.getTemplateTitle() + ".zip\"")
+//                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+//                .body(resource);
+//    }
+
     @GetMapping("/{id}/download/free")
     public ResponseEntity<Resource> downloadFreeTemplate(
             @PathVariable Long id,
@@ -265,6 +331,7 @@ public class TemplateController {
 
         if (files == null || files.isEmpty()) return ResponseEntity.badRequest().build();
 
+        // Check ownership/payment (same as before)
         List<PurchaseDownloadItem> existingItems =
                 purchaseDownloadItemRepository.findByUserAndTemplate(user, template);
 
@@ -275,13 +342,11 @@ public class TemplateController {
         boolean isFree = template.getPriceSetting().equals("No Payment")
                 || template.getPriceSetting().equals("₱0 or donation");
 
-        // ✅ Only block if PAID and NOT OWNED
         if (!hasPaid && !isFree) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(new ByteArrayResource("Payment required".getBytes()));
         }
 
-        // ✅ Only log FREE_DOWNLOAD if not already owned by payment
         if (!hasPaid) {
             PurchaseDownloadItem item = new PurchaseDownloadItem();
             item.setUser(user);
@@ -292,14 +357,37 @@ public class TemplateController {
             purchaseDownloadItemRepository.save(item);
         }
 
-        // ✅ Create ZIP
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (ZipOutputStream zos = new ZipOutputStream(baos)) {
             for (File file : files) {
-                Path filePath = Paths.get(file.getFilePath());
-                if (!Files.exists(filePath)) continue;
-                zos.putNextEntry(new ZipEntry(filePath.getFileName().toString()));
-                Files.copy(filePath, zos);
+                String filePath = file.getFilePath();
+
+                if (filePath.contains("\\")) {
+                    filePath = filePath.replace("\\", "/");
+                }
+
+                Path absolutePath = resolveFilePath(filePath);
+
+                if (!Files.exists(absolutePath)) {
+                    System.err.println("File not found: " + absolutePath);
+                    System.err.println("Original path in DB: " + file.getFilePath());
+
+                    Path alternative1 = Paths.get("uploads",
+                            Paths.get(file.getFilePath()).getFileName().toString());
+                    Path alternative2 = Paths.get(System.getProperty("user.dir"),
+                            "uploads", Paths.get(file.getFilePath()).getFileName().toString());
+
+                    if (Files.exists(alternative1)) {
+                        absolutePath = alternative1;
+                    } else if (Files.exists(alternative2)) {
+                        absolutePath = alternative2;
+                    } else {
+                        continue;
+                    }
+                }
+
+                zos.putNextEntry(new ZipEntry(file.getFileName()));
+                Files.copy(absolutePath, zos);
                 zos.closeEntry();
             }
         }
@@ -308,12 +396,32 @@ public class TemplateController {
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + template.getTemplateTitle() + ".zip\"")
+                        "attachment; filename=\"" + template.getTemplateTitle().replaceAll("[^a-zA-Z0-9._-]", "_") + ".zip\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(resource);
     }
 
+    private Path resolveFilePath(String filePath) {
+        String normalizedPath = filePath.replace("\\", "/");
 
+        if (normalizedPath.startsWith("uploads/")) {
+            String projectRoot = System.getProperty("user.dir");
+            return Paths.get(projectRoot, normalizedPath);
+        }
+
+        if (!normalizedPath.contains("/") && !normalizedPath.contains("\\")) {
+            String projectRoot = System.getProperty("user.dir");
+            return Paths.get(projectRoot, "uploads", normalizedPath);
+        }
+
+        Path path = Paths.get(normalizedPath);
+        if (path.isAbsolute()) {
+            return path;
+        }
+
+        String projectRoot = System.getProperty("user.dir");
+        return Paths.get(projectRoot, normalizedPath);
+    }
 
     @GetMapping("/user/{email}/library")
     public ResponseEntity<List<PurchaseDownloadItem>> getUserLibrary(@PathVariable String email) {
