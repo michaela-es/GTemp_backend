@@ -1,9 +1,11 @@
 package gtemp.gtemp_io.service;
 
 import gtemp.gtemp_io.entity.User;
-import org.springframework.stereotype.Service;
 import gtemp.gtemp_io.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+import java.util.Optional;
 
 @Service
 public class UserService {
@@ -16,25 +18,22 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * Create a new user with encrypted password
+     */
     public User createUser(User user) {
-//        if (userRepository.existsByEmail(user.getEmail())) {
-//            throw new RuntimeException("Email already exists");
-//        }
-//
-//        if (userRepository.existsByUsername(user.getUsername())) {
-//            throw new RuntimeException("Username already exists");
-//        }
-
         String encryptedPassword = passwordEncoder.encode(user.getPassword());
         user.setPassword(encryptedPassword);
-
         return userRepository.save(user);
     }
 
-    public User authenticateUser(String username, String password) {
-        User user = userRepository.findByUsername(username);
+    /**
+     * Authenticate user by username or email and password
+     */
+    public User authenticateUser(String usernameOrEmail, String password) {
+        User user = userRepository.findByUsername(usernameOrEmail);
         if (user == null) {
-            user = userRepository.findByEmail(username);
+            user = userRepository.findByEmail(usernameOrEmail);
         }
 
         if (user == null) {
@@ -46,5 +45,26 @@ public class UserService {
         }
 
         return user;
+    }
+
+    /**
+     * Find user by ID
+     */
+    public Optional<User> getUserById(Long id) {
+        return userRepository.findById(id);
+    }
+
+    /**
+     * Find user by email
+     */
+    public Optional<User> getUserByEmail(String email) {
+        return Optional.ofNullable(userRepository.findByEmail(email));
+    }
+
+    /**
+     * Save or update user
+     */
+    public User saveUser(User user) {
+        return userRepository.save(user);
     }
 }

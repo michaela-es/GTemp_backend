@@ -67,7 +67,8 @@ public class Template {
     private Float rating = 0.0f;
 
     @Column(name = "average_rating")
-    private Float averageRating = 0.0f;
+    private Double averageRating;
+
 
     @Column(name = "wishlist_count")
     private Integer wishlistCount = 0;
@@ -86,7 +87,12 @@ public class Template {
     @JsonManagedReference
     private List<File> files = new ArrayList<>();
 
-    public Template() {}
+    @Column(name = "price_setting")
+    private String priceSetting; // "₱0 or donation", "Paid", "No Payment"
+
+    public Template() {
+        this.releaseDate = LocalDateTime.now();
+    }
 
 
     public Long getId() { return id; }
@@ -143,8 +149,9 @@ public class Template {
     public Float getRating() { return rating; }
     public void setRating(Float rating) { this.rating = rating; }
 
-    public Float getAverageRating() { return averageRating; }
-    public void setAverageRating(Float averageRating) { this.averageRating = averageRating; }
+    public Double getAverageRating() { return averageRating; }
+    public void setAverageRating(Double averageRating) { this.averageRating = averageRating; }
+
 
     public Integer getWishlistCount() { return wishlistCount; }
     public void setWishlistCount(Integer wishlistCount) { this.wishlistCount = wishlistCount; }
@@ -160,6 +167,9 @@ public class Template {
 
     public List<File> getFiles() { return files; }
     public void setFiles(List<File> files) { this.files = files; }
+
+    public String getPriceSetting() { return priceSetting; }
+    public void setPriceSetting(String priceSetting) { this.priceSetting = priceSetting; }
 
     public void addImage(TemplateImage image) {
         images.add(image);
