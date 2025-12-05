@@ -86,8 +86,10 @@ public class TemplateImage {
         this.template = template;
     }
 
-    public void setImagePath(String imagePath) {
-        this.filePath = imagePath;
+    public String getImagePath() {
+        return filePath;
     }
-
+    public void setImagePath(String filePath) {
+        this.filePath = filePath;
+    }
 }

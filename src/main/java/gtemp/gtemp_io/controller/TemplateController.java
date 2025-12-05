@@ -6,7 +6,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import gtemp.gtemp_io.entity.*;
+import gtemp.gtemp_io.repository.TemplateImageRepository;
 import gtemp.gtemp_io.repository.TemplateRepository;
+import gtemp.gtemp_io.service.TemplateImageService;
 import gtemp.gtemp_io.service.TemplateService;
 import gtemp.gtemp_io.service.UserService;
 import gtemp.gtemp_io.repository.PurchaseDownloadItemRepository;
@@ -55,6 +57,20 @@ public class TemplateController {
 
     @Autowired
     private RatingItemRepository ratingItemRepository;
+
+    @Autowired
+    private TemplateImageService templateImageService;
+
+    @GetMapping("/{id}/images")
+    public ResponseEntity<?> getTemplateImages(@PathVariable Long id) {
+        List<String> imagePaths = templateImageService.getImagePathsByTemplateId(id);
+
+        if (imagePaths.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "No images found for this template"));
+        }
+
+        return ResponseEntity.ok(imagePaths);
+    }
 
     @GetMapping("/debug-uploads")
     public ResponseEntity<Map<String, Object>> debugUploads() {
