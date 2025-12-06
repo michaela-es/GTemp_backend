@@ -120,11 +120,13 @@ public class TemplateController {
                     .map(template -> new TemplateHomePageDTO(
                             template.getId(),
                             template.getTemplateTitle(),
-                            template.getTemplateDesc(), // ADD THIS
+                            template.getTemplateDesc(),
                             template.getCoverImagePath(),
                             template.getAverageRating(),
                             template.getPrice(),
-                            template.getDownloadCount() != null ? template.getDownloadCount() : 0
+                            template.getDownloadCount() != null ? template.getDownloadCount() : 0,
+                            template.getEngine(),
+                            template.getType()
                     ))
                     .collect(Collectors.toList());
 

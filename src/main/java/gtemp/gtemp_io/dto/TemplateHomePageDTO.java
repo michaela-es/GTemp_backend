@@ -9,9 +9,11 @@ public class TemplateHomePageDTO {
     private Double averageRating;
     private Float price;
     private Integer downloadCount;
+    private String engine;
+    private String type;
 
     public TemplateHomePageDTO(Long id, String templateTitle, String templateDesc, String coverImagePath,
-                               Double averageRating, Float price, Integer downloadCount) {
+                               Double averageRating, Float price, Integer downloadCount, String engine, String type) {
         this.id = id;
         this.templateTitle = templateTitle;
         this.templateDesc = templateDesc;
@@ -19,7 +21,14 @@ public class TemplateHomePageDTO {
         this.averageRating = averageRating;
         this.price = price;
         this.downloadCount = downloadCount;
+        this.engine = engine;
+        this.type = type;
     }
+
+    public String getEngine() { return engine; }
+    public void setEngine(String engine) { this.engine = engine; }
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 
     public Long getId() {
         return id;
