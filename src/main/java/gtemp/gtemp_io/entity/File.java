@@ -25,7 +25,7 @@ public class File {
     @Column(name = "file_size")
     private Long fileSize;
 
-    @ManyToOne
+    @ManyToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "template_id", referencedColumnName = "templateid", nullable = false)
     @JsonBackReference
     private Template template;

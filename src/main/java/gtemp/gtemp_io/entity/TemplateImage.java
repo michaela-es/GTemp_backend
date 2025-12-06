@@ -23,7 +23,7 @@ public class TemplateImage {
     @Column(name = "file_size")
     private Long fileSize;
 
-    @ManyToOne
+    @ManyToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "template_id")
     @JsonBackReference
     private Template template;

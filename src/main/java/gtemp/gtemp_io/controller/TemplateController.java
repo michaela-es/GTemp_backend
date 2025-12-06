@@ -23,7 +23,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpStatus;
-
+import gtemp.gtemp_io.dto.TemplateHomePageDTO;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -60,6 +60,7 @@ public class TemplateController {
 
     @Autowired
     private TemplateImageService templateImageService;
+
 
     @GetMapping("/{id}/images")
     public ResponseEntity<?> getTemplateImages(@PathVariable Long id) {
@@ -100,13 +101,39 @@ public class TemplateController {
         return ResponseEntity.ok(templates);
     }
 
-    @GetMapping
-    public ResponseEntity<List<Template>> getAllTemplates() {
+//    @GetMapping
+//    public ResponseEntity<List<Template>> getAllTemplates() {
+//        try {
+//            List<Template> templates = templateService.getAllTemplates();
+//            return ResponseEntity.ok(templates);
+//        } catch (Exception e) {
+//            return ResponseEntity.status(500).build();
+//        }
+//        }
+
+    @GetMapping("/homepage")
+    public ResponseEntity<List<TemplateHomePageDTO>> getHomepageTemplates() {
         try {
             List<Template> templates = templateService.getAllTemplates();
-            return ResponseEntity.ok(templates);
+
+            List<TemplateHomePageDTO> homepageDTOs = templates.stream()
+                    .map(template -> new TemplateHomePageDTO(
+                            template.getId(),
+                            template.getTemplateTitle(),
+                            template.getTemplateDesc(), // ADD THIS
+                            template.getCoverImagePath(),
+                            template.getAverageRating(),
+                            template.getPrice(),
+                            template.getDownloadCount() != null ? template.getDownloadCount() : 0
+                    ))
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(homepageDTOs);
+
         } catch (Exception e) {
-            return ResponseEntity.status(500).build();
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Collections.emptyList());
         }
     }
 
