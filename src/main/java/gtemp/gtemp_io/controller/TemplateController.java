@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import gtemp.gtemp_io.dto.FileDTO;
 import gtemp.gtemp_io.entity.*;
 import gtemp.gtemp_io.repository.TemplateImageRepository;
 import gtemp.gtemp_io.repository.TemplateRepository;
@@ -720,5 +721,138 @@ public class TemplateController {
     public ResponseEntity<List<Template>> getUserTemplates(@PathVariable Long userId) {
         List<Template> templates = templateService.getTemplatesByOwner(userId);
         return ResponseEntity.ok(templates);
+    }
+
+    @GetMapping("/{id}/files")
+    public ResponseEntity<List<FileDTO>> getTemplateFiles(@PathVariable Long id) {
+        Optional<Template> templateOpt = templateService.getTemplateById(id);
+        if (templateOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Collections.emptyList());
+        }
+
+        List<File> files = templateOpt.get().getFiles();
+        List<FileDTO> fileDTOs = files.stream()
+                .map(file -> new FileDTO(
+                        file.getId(),
+                        file.getFileName(),
+                        file.getFilePath(),
+                        file.getFileType(),
+                        file.getFileSize()
+                ))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(fileDTOs);
+    }
+
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> updateTemplate(
+            @PathVariable Long id,
+            @RequestPart("template") String templateJson,
+            @RequestPart(value = "coverImage", required = false) MultipartFile coverImage,
+            @RequestPart(value = "images", required = false) List<MultipartFile> images,
+            @RequestPart(value = "files", required = false) List<MultipartFile> files) {
+
+        try {
+            Optional<Template> existingTemplateOpt = templateService.getTemplateById(id);
+            if (existingTemplateOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Template not found"));
+            }
+
+            Template existingTemplate = existingTemplateOpt.get();
+
+            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            System.out.println("Updating template ID: " + id);
+            System.out.println("Received template JSON: " + templateJson);
+
+            JsonNode rootNode = objectMapper.readTree(templateJson);
+
+            Long templateOwner = null;
+            if (rootNode.has("templateOwner") && !rootNode.get("templateOwner").isNull()) {
+                templateOwner = rootNode.get("templateOwner").asLong();
+                System.out.println("Found templateOwner in JSON: " + templateOwner);
+            }
+
+            ((ObjectNode) rootNode).remove("templateOwner");
+
+            Template updatedTemplateData = objectMapper.readValue(rootNode.toString(), Template.class);
+
+            if (templateOwner != null) {
+                updatedTemplateData.setTemplateOwner(templateOwner);
+            }
+
+            existingTemplate.setTemplateTitle(updatedTemplateData.getTemplateTitle());
+            existingTemplate.setTemplateDesc(updatedTemplateData.getTemplateDesc());
+            existingTemplate.setPriceSetting(updatedTemplateData.getPriceSetting());
+            existingTemplate.setPrice(updatedTemplateData.getPrice());
+            existingTemplate.setVisibility(updatedTemplateData.getVisibility());
+            existingTemplate.setEngine(updatedTemplateData.getEngine());
+            existingTemplate.setType(updatedTemplateData.getType());
+            existingTemplate.setUpdateDate(LocalDateTime.now()); 
+
+            if (coverImage != null && !coverImage.isEmpty()) {
+                String uploadsDir = "uploads/";
+                Files.createDirectories(Paths.get(uploadsDir));
+                String fileName = System.currentTimeMillis() + "_" +
+                        coverImage.getOriginalFilename().replace(" ", "_");
+                String fullFilePath = uploadsDir + fileName;
+                Files.copy(coverImage.getInputStream(), Paths.get(fullFilePath));
+                existingTemplate.setCoverImagePath("uploads/" + fileName);
+            }
+
+            if (images != null && !images.isEmpty()) {
+                for (MultipartFile image : images) {
+                    if (!image.isEmpty()) {
+                        String uploadsDir = "uploads/";
+                        Files.createDirectories(Paths.get(uploadsDir));
+                        String fileName = System.currentTimeMillis() + "_" +
+                                image.getOriginalFilename().replace(" ", "_");
+                        String fullFilePath = uploadsDir + fileName;
+                        Files.copy(image.getInputStream(), Paths.get(fullFilePath));
+
+                        TemplateImage templateImage = new TemplateImage();
+                        templateImage.setImagePath("uploads/" + fileName);
+                        templateImage.setTemplate(existingTemplate);
+                        existingTemplate.addImage(templateImage);
+                    }
+                }
+            }
+
+            if (files != null && !files.isEmpty()) {
+                for (MultipartFile multipartFile : files) {
+                    if (!multipartFile.isEmpty()) {
+                        String uploadsDir = "uploads/";
+                        Files.createDirectories(Paths.get(uploadsDir));
+                        String fileName = System.currentTimeMillis() + "_" +
+                                multipartFile.getOriginalFilename().replace(" ", "_");
+                        String fullFilePath = uploadsDir + fileName;
+                        Files.copy(multipartFile.getInputStream(), Paths.get(fullFilePath));
+
+                        File fileEntity = new File();
+                        fileEntity.setFileName(multipartFile.getOriginalFilename());
+                        fileEntity.setFilePath("uploads/" + fileName);
+                        fileEntity.setFileSize(multipartFile.getSize());
+                        fileEntity.setFileType(multipartFile.getContentType());
+                        fileEntity.setTemplate(existingTemplate);
+
+                        existingTemplate.addFile(fileEntity);
+                    }
+                }
+            }
+
+            Template savedTemplate = templateRepository.save(existingTemplate);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Template updated successfully!");
+            response.put("templateId", savedTemplate.getId());
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to update template: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
     }
 }
