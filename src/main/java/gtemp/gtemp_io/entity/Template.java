@@ -1,3 +1,4 @@
+//Template.java
 package gtemp.gtemp_io.entity;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -75,6 +76,11 @@ public class Template {
     @Transient
     private String templateOwnerUsername;
 
+    @Column(name = "wishlist_count")
+    private Integer wishlistCount = 0;
+    
+    @Column(name = "download_count")
+    private Integer downloadCount = 0;
 
     public Template() {
         this.releaseDate = LocalDateTime.now();
@@ -139,6 +145,22 @@ public class Template {
     public String getPriceSetting() { return priceSetting; }
     public void setPriceSetting(String priceSetting) { this.priceSetting = priceSetting; }
 
+    public Integer getWishlistCount() {
+        return wishlistCount;
+    }
+
+    public void setWishlistCount(Integer wishlistCount) {
+        this.wishlistCount = wishlistCount;
+    }
+
+    public Integer getDownloadCount() {
+        return downloadCount;
+    }
+
+    public void setDownloadCount(Integer downloadCount) {
+        this.downloadCount = downloadCount;
+    }
+
     public void addImage(TemplateImage image) {
         images.add(image);
         image.setTemplate(this);
@@ -164,6 +186,11 @@ public class Template {
 
     public void setTemplateOwnerUsername(String templateOwnerUsername) {
         this.templateOwnerUsername = templateOwnerUsername;
+    }
+
+    public void incrementDownloadCount() {
+        if (this.downloadCount == null) this.downloadCount = 0;
+        this.downloadCount += 1;
     }
 
 }

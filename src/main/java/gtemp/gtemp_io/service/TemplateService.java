@@ -183,4 +183,14 @@ public class TemplateService {
 
         return savedTemplate;
     }
+
+    public List<Template> getTemplatesByOwner(Long ownerId) {
+        try {
+            return templateRepository.findByTemplateOwnerAndVisibilityTrue(ownerId);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to retrieve templates: " + e.getMessage(), e);
+        }
+    }
+    
+
 }

@@ -10,6 +10,6 @@ import java.util.List;
 public interface TemplateRepository extends JpaRepository<Template, Long> {
 
     List<Template> findByVisibilityTrue();
-
+    List<Template> findByTemplateOwnerAndVisibilityTrue(Long templateOwner);
 
 }

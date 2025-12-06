@@ -239,6 +239,10 @@ public class TemplateController {
                 item.setActionDate(LocalDateTime.now());
                 item.setAmountPaid(amountToDeduct > 0 ? amountToDeduct : null);
                 purchaseDownloadItemRepository.save(item);
+
+                // ✅ Increment unique download count
+                template.incrementDownloadCount();
+                templateService.saveTemplate(template);
             }
 
             return ResponseEntity.ok(Map.of(
@@ -362,8 +366,9 @@ public class TemplateController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(new ByteArrayResource("Payment required".getBytes()));
         }
-
-        if (!hasPaid) {
+        boolean alreadyDownloaded = existingItems.stream()
+            .anyMatch(i -> i.getActionType() == PurchaseDownloadItem.ActionType.FREE_DOWNLOAD);
+        if (!hasPaid && !alreadyDownloaded) {
             PurchaseDownloadItem item = new PurchaseDownloadItem();
             item.setUser(user);
             item.setTemplate(template);
@@ -371,6 +376,9 @@ public class TemplateController {
             item.setActionDate(LocalDateTime.now());
             item.setAmountPaid(null);
             purchaseDownloadItemRepository.save(item);
+
+            template.incrementDownloadCount();
+            templateService.saveTemplate(template);
         }
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -679,5 +687,9 @@ public class TemplateController {
         }
     }
 
-
+    @GetMapping("/user/{userId}/my-templates")
+    public ResponseEntity<List<Template>> getUserTemplates(@PathVariable Long userId) {
+        List<Template> templates = templateService.getTemplatesByOwner(userId);
+        return ResponseEntity.ok(templates);
+    }
 }
