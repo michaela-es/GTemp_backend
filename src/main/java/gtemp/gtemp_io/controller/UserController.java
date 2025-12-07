@@ -1,11 +1,14 @@
 package gtemp.gtemp_io.controller;
 
 import gtemp.gtemp_io.dto.LoginRequest;
+import gtemp.gtemp_io.dto.UpdateUserRequest;
 import gtemp.gtemp_io.entity.User;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import gtemp.gtemp_io.service.UserService;
-
+import gtemp.gtemp_io.dto.UserResponse;
+import java.util.Map;
+import java.util.Collections;
 @RestController
 @RequestMapping("/api")
 @CrossOrigin(origins = "*")
@@ -23,15 +26,40 @@ public class UserController {
     public User createUser(@RequestBody User user){
         return userService.createUser(user);
     }
+    
+    @GetMapping("/users/{email}/wallet")
+    public ResponseEntity<?> getUserWallet(@PathVariable String email) {
+        return userService.getUserByEmail(email)
+                .<ResponseEntity<?>>map(user -> ResponseEntity.ok(Collections.singletonMap("wallet", user.getWallet())))
+                .orElseGet(() -> ResponseEntity.status(404).body("User not found"));
+    }
 
     @PostMapping("/login")
     public ResponseEntity<?> loginUser(@RequestBody LoginRequest loginRequest) {
         try {
             User user = userService.authenticateUser(loginRequest.getUsername(), loginRequest.getPassword());
-            return ResponseEntity.ok(user);
+            UserResponse response = new UserResponse(user.getUsername(), user.getEmail(), user.getWallet(), user.getUserID());
+            return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             return ResponseEntity.status(401).body(e.getMessage());
         }
     }
+
+    @PutMapping("/users")
+    public ResponseEntity<?> updateUser(@RequestBody UpdateUserRequest request) {
+        try {
+            User updatedUser = userService.updateUser(
+                    request.getUserID(),
+                    request.getUsername(),
+                    request.getEmail()
+            );
+
+            return ResponseEntity.ok(new UserResponse(updatedUser));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body("Failed to update user: " + e.getMessage());
+        }
+    }
+
 }
 

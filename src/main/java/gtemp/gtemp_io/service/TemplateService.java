@@ -12,8 +12,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,7 +24,7 @@ public class TemplateService {
 
     @Autowired
     private TemplateRepository templateRepository;
-
+    
     @Autowired
     private FileRepository fileRepository;
 
@@ -125,4 +127,70 @@ public class TemplateService {
             throw e;
         }
     }
+
+    public Template saveTemplate(Template template) {
+        return templateRepository.save(template);
+    }
+
+    public Template saveTemplateFiles(Template template, List<MultipartFile> images, List<MultipartFile> files) throws IOException {
+        Template savedTemplate = templateRepository.save(template);
+
+        if (images != null && !images.isEmpty()) {
+            List<File> imageFiles = new ArrayList<>();
+            for (MultipartFile image : images) {
+                if (!image.isEmpty()) {
+                    String uploadsDir = "uploads/";
+                    Files.createDirectories(Paths.get(uploadsDir));
+                    String fileName = System.currentTimeMillis() + "_" +
+                            image.getOriginalFilename().replace(" ", "_");
+                    String fullFilePath = uploadsDir + fileName;
+                    Files.copy(image.getInputStream(), Paths.get(fullFilePath));
+
+                    File imageFile = new File();
+                    imageFile.setFileName(image.getOriginalFilename());
+                    imageFile.setFilePath("uploads/" + fileName);
+                    imageFile.setFileSize(image.getSize());
+                    imageFile.setFileType(image.getContentType());
+                    imageFile.setTemplate(savedTemplate);
+                    imageFiles.add(imageFile);
+                }
+            }
+            fileRepository.saveAll(imageFiles);
+        }
+
+        if (files != null && !files.isEmpty()) {
+            List<File> templateFiles = new ArrayList<>();
+            for (MultipartFile file : files) {
+                if (!file.isEmpty()) {
+                    String uploadsDir = "uploads/";
+                    Files.createDirectories(Paths.get(uploadsDir));
+                    String fileName = System.currentTimeMillis() + "_" +
+                            file.getOriginalFilename().replace(" ", "_");
+                    String fullFilePath = uploadsDir + fileName;
+                    Files.copy(file.getInputStream(), Paths.get(fullFilePath));
+
+                    File templateFile = new File();
+                    templateFile.setFileName(file.getOriginalFilename());
+                    templateFile.setFilePath("uploads/" + fileName);
+                    templateFile.setFileSize(file.getSize());
+                    templateFile.setFileType(file.getContentType());
+                    templateFile.setTemplate(savedTemplate); // Set the saved template
+                    templateFiles.add(templateFile);
+                }
+            }
+            fileRepository.saveAll(templateFiles);
+        }
+
+        return savedTemplate;
+    }
+
+    public List<Template> getTemplatesByOwner(Long ownerId) {
+        try {
+            return templateRepository.findByTemplateOwnerAndVisibilityTrue(ownerId);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to retrieve templates: " + e.getMessage(), e);
+        }
+    }
+    
+
 }

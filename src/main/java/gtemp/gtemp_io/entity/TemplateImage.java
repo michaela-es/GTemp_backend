@@ -23,7 +23,7 @@ public class TemplateImage {
     @Column(name = "file_size")
     private Long fileSize;
 
-    @ManyToOne
+    @ManyToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "template_id")
     @JsonBackReference
     private Template template;
@@ -86,8 +86,10 @@ public class TemplateImage {
         this.template = template;
     }
 
-    public void setImagePath(String imagePath) {
-        this.filePath = imagePath;
+    public String getImagePath() {
+        return filePath;
     }
-
+    public void setImagePath(String filePath) {
+        this.filePath = filePath;
+    }
 }

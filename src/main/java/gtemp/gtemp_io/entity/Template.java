@@ -1,5 +1,7 @@
+//Template.java
 package gtemp.gtemp_io.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import java.time.LocalDateTime;
@@ -33,20 +35,9 @@ public class Template {
     @Column(name = "type")
     private String type;
 
-    @Column(name = "category")
-    private String category;
-
-    @Column(name = "genre")
-    private String genre;
-
-    @Column(name = "template_owner")
+    @JsonProperty
+    @Column(name = "template_owner", nullable = false)
     private Long templateOwner;
-
-    @Column(name = "template_img")
-    private String templateImg;
-
-    @Column(name = "template_rating")
-    private Double templateRating;
 
     @Column(name = "release_date")
     private LocalDateTime releaseDate;
@@ -57,23 +48,8 @@ public class Template {
     @Column(name = "cover_image_path")
     private String coverImagePath;
 
-    @Column(name = "views")
-    private Integer views = 0;
-
-    @Column(name = "downloads")
-    private Integer downloads = 0;
-
-    @Column(name = "rating")
-    private Float rating = 0.0f;
-
     @Column(name = "average_rating")
-    private Float averageRating = 0.0f;
-
-    @Column(name = "wishlist_count")
-    private Integer wishlistCount = 0;
-
-    @Column(name = "is_wishlisted")
-    private Boolean isWishlisted = false;
+    private Double averageRating;
 
     @Column(name = "revenue")
     private Float revenue = 0.0f;
@@ -82,12 +58,41 @@ public class Template {
     @JsonManagedReference
     private List<TemplateImage> images = new ArrayList<>();
 
-    @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(
+            mappedBy = "template",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
     @JsonManagedReference
     private List<File> files = new ArrayList<>();
 
-    public Template() {}
+    @Column(name = "price_setting")
+    private String priceSetting; // "₱0 or donation", "Paid", "No Payment"
 
+    @Transient
+    private String templateOwnerUsername;
+
+    @Column(name = "wishlist_count")
+    private Integer wishlistCount = 0;
+    
+    @Column(name = "download_count")
+    private Integer downloadCount = 0;
+
+    @OneToMany
+    @JoinColumn(name = "template_id", referencedColumnName = "templateid")
+    private List<Comment> comments = new ArrayList<>();
+
+    public Template() {
+        this.releaseDate = LocalDateTime.now();
+    }
+
+    public String getTemplateOwnerUsername() {
+        return templateOwnerUsername;
+    }
+
+    public void setTemplateOwner(String templateOwnerUsername) {
+        this.templateOwnerUsername = this.templateOwnerUsername;
+    }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -110,20 +115,8 @@ public class Template {
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
 
-    public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
-
-    public String getGenre() { return genre; }
-    public void setGenre(String genre) { this.genre = genre; }
-
     public Long getTemplateOwner() { return templateOwner; }
     public void setTemplateOwner(Long templateOwner) { this.templateOwner = templateOwner; }
-
-    public String getTemplateImg() { return templateImg; }
-    public void setTemplateImg(String templateImg) { this.templateImg = templateImg; }
-
-    public Double getTemplateRating() { return templateRating; }
-    public void setTemplateRating(Double templateRating) { this.templateRating = templateRating; }
 
     public LocalDateTime getReleaseDate() { return releaseDate; }
     public void setReleaseDate(LocalDateTime releaseDate) { this.releaseDate = releaseDate; }
@@ -134,23 +127,8 @@ public class Template {
     public String getCoverImagePath() { return coverImagePath; }
     public void setCoverImagePath(String coverImagePath) { this.coverImagePath = coverImagePath; }
 
-    public Integer getViews() { return views; }
-    public void setViews(Integer views) { this.views = views; }
-
-    public Integer getDownloads() { return downloads; }
-    public void setDownloads(Integer downloads) { this.downloads = downloads; }
-
-    public Float getRating() { return rating; }
-    public void setRating(Float rating) { this.rating = rating; }
-
-    public Float getAverageRating() { return averageRating; }
-    public void setAverageRating(Float averageRating) { this.averageRating = averageRating; }
-
-    public Integer getWishlistCount() { return wishlistCount; }
-    public void setWishlistCount(Integer wishlistCount) { this.wishlistCount = wishlistCount; }
-
-    public Boolean getIsWishlisted() { return isWishlisted; }
-    public void setIsWishlisted(Boolean isWishlisted) { this.isWishlisted = isWishlisted; }
+    public Double getAverageRating() { return averageRating; }
+    public void setAverageRating(Double averageRating) { this.averageRating = averageRating; }
 
     public Float getRevenue() { return revenue; }
     public void setRevenue(Float revenue) { this.revenue = revenue; }
@@ -160,6 +138,25 @@ public class Template {
 
     public List<File> getFiles() { return files; }
     public void setFiles(List<File> files) { this.files = files; }
+
+    public String getPriceSetting() { return priceSetting; }
+    public void setPriceSetting(String priceSetting) { this.priceSetting = priceSetting; }
+
+    public Integer getWishlistCount() {
+        return wishlistCount;
+    }
+
+    public void setWishlistCount(Integer wishlistCount) {
+        this.wishlistCount = wishlistCount;
+    }
+
+    public Integer getDownloadCount() {
+        return downloadCount;
+    }
+
+    public void setDownloadCount(Integer downloadCount) {
+        this.downloadCount = downloadCount;
+    }
 
     public void addImage(TemplateImage image) {
         images.add(image);
@@ -172,6 +169,9 @@ public class Template {
     }
 
     public void addFile(File file) {
+        if (files == null) {
+            files = new ArrayList<>();
+        }
         files.add(file);
         file.setTemplate(this);
     }
@@ -180,4 +180,14 @@ public class Template {
         files.remove(file);
         file.setTemplate(null);
     }
+
+    public void setTemplateOwnerUsername(String templateOwnerUsername) {
+        this.templateOwnerUsername = templateOwnerUsername;
+    }
+
+    public void incrementDownloadCount() {
+        if (this.downloadCount == null) this.downloadCount = 0;
+        this.downloadCount += 1;
+    }
+
 }
