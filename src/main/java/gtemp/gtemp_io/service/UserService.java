@@ -67,4 +67,20 @@ public class UserService {
     public User saveUser(User user) {
         return userRepository.save(user);
     }
+
+    public User updateUser(Long userID, String username, String email) {
+        User user = userRepository.findById(userID)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (username != null && !username.isEmpty()) {
+            user.setUsername(username);
+        }
+
+        if (email != null && !email.isEmpty()) {
+            user.setEmail(email);
+        }
+
+        return userRepository.save(user);
+    }
+
 }

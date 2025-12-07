@@ -1,3 +1,4 @@
+//WishlistService.java
 package gtemp.gtemp_io.service;
 
 import gtemp.gtemp_io.entity.Template;
@@ -5,6 +6,7 @@ import gtemp.gtemp_io.entity.WishlistItem;
 import gtemp.gtemp_io.repository.WishlistRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import gtemp.gtemp_io.repository.TemplateRepository;
 
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +17,9 @@ public class WishlistService {
     @Autowired
     private WishlistRepository wishlistRepository;
 
+    @Autowired
+    private TemplateRepository templateRepository;
+    
     public boolean isInWishlist(Long userId, Long templateId) {
         return wishlistRepository.existsByUserIdAndTemplateId(userId, templateId);
     }
@@ -36,16 +41,23 @@ public class WishlistService {
 
     public boolean toggleWishlist(Long userId, Long templateId) {
         Optional<WishlistItem> itemOpt = wishlistRepository.findByUserIdAndTemplateId(userId, templateId);
+        boolean added;
 
         if (itemOpt.isPresent()) {
             wishlistRepository.delete(itemOpt.get());
-            return false;
+            added = false;
         } else {
             WishlistItem item = new WishlistItem(userId, templateId);
             wishlistRepository.save(item);
-            return true;
+            added = true;
         }
+
+        // ✅ Update the wishlist count on the template
+        updateTemplateWishlistCount(templateId);
+
+        return added;
     }
+
 
 
 
@@ -55,6 +67,14 @@ public class WishlistService {
 
     public long getWishlistCount(Long templateId) {
         return wishlistRepository.countByTemplateId(templateId);
+    }
+
+    public void updateTemplateWishlistCount(Long templateId) {
+        long count = wishlistRepository.countByTemplateId(templateId);
+        templateRepository.findById(templateId).ifPresent(template -> {
+            template.setWishlistCount((int) count);
+            templateRepository.save(template);
+        });
     }
 
 }

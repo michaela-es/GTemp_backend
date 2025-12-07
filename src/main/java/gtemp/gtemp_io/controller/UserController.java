@@ -1,6 +1,7 @@
 package gtemp.gtemp_io.controller;
 
 import gtemp.gtemp_io.dto.LoginRequest;
+import gtemp.gtemp_io.dto.UpdateUserRequest;
 import gtemp.gtemp_io.entity.User;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -43,5 +44,22 @@ public class UserController {
             return ResponseEntity.status(401).body(e.getMessage());
         }
     }
+
+    @PutMapping("/users")
+    public ResponseEntity<?> updateUser(@RequestBody UpdateUserRequest request) {
+        try {
+            User updatedUser = userService.updateUser(
+                    request.getUserID(),
+                    request.getUsername(),
+                    request.getEmail()
+            );
+
+            return ResponseEntity.ok(new UserResponse(updatedUser));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body("Failed to update user: " + e.getMessage());
+        }
+    }
+
 }
 
