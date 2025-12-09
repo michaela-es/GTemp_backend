@@ -101,16 +101,6 @@ public class TemplateController {
         return ResponseEntity.ok(templates);
     }
 
-//    @GetMapping
-//    public ResponseEntity<List<Template>> getAllTemplates() {
-//        try {
-//            List<Template> templates = templateService.getAllTemplates();
-//            return ResponseEntity.ok(templates);
-//        } catch (Exception e) {
-//            return ResponseEntity.status(500).build();
-//        }
-//        }
-
     @GetMapping("/homepage")
     public ResponseEntity<List<TemplateHomePageDTO>> getHomepageTemplates() {
         try {

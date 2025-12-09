@@ -186,11 +186,13 @@ public class TemplateService {
 
     public List<Template> getTemplatesByOwner(Long ownerId) {
         try {
-            return templateRepository.findByTemplateOwnerAndVisibilityTrue(ownerId);
+            // Return all templates for the owner, no visibility filtering
+            return templateRepository.findByTemplateOwner(ownerId);
         } catch (Exception e) {
             throw new RuntimeException("Failed to retrieve templates: " + e.getMessage(), e);
         }
     }
+
     
 
 }
