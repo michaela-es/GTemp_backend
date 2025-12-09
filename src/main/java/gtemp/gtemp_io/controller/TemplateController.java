@@ -118,6 +118,7 @@ public class TemplateController {
             List<Template> templates = templateService.getAllTemplates();
 
             List<TemplateHomePageDTO> homepageDTOs = templates.stream()
+                    .filter(template -> Boolean.TRUE.equals(template.getVisibility()))
                     .map(template -> new TemplateHomePageDTO(
                             template.getId(),
                             template.getTemplateTitle(),
