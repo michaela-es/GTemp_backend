@@ -61,5 +61,42 @@ public class UserController {
         }
     }
 
+    @PostMapping("/users/change-password")
+    public ResponseEntity<?> changePassword(@RequestBody Map<String, String> body) {
+        try {
+            Long userId = Long.parseLong(body.get("userID"));
+            String currentPassword = body.get("currentPassword");
+            String newPassword = body.get("newPassword");
+
+            User user = userService.getUserById(userId)
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+            if (!userService.getPasswordEncoder().matches(currentPassword, user.getPassword())) {
+                return ResponseEntity.status(400).body(Collections.singletonMap("message", "Current password is incorrect"));
+            }
+
+            user.setPassword(userService.getPasswordEncoder().encode(newPassword));
+            userService.saveUser(user);
+
+            return ResponseEntity.ok(Collections.singletonMap("message", "Password changed successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Collections.singletonMap("message", "Failed to change password: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/users/{email}/wallet/add")
+    public ResponseEntity<?> addLoad(@PathVariable String email, @RequestBody Map<String, Double> body) {
+        try {
+            double amount = body.get("amount");
+            User user = userService.getUserByEmail(email)
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+            user.setWallet(user.getWallet() + amount);
+            userService.saveUser(user);
+            return ResponseEntity.ok(Collections.singletonMap("wallet", user.getWallet()));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Collections.singletonMap("message", e.getMessage()));
+        }
+    }
+
 }
 

@@ -83,4 +83,9 @@ public class UserService {
         return userRepository.save(user);
     }
 
+    public PasswordEncoder getPasswordEncoder() {
+        return this.passwordEncoder;
+    }
+
+
 }
