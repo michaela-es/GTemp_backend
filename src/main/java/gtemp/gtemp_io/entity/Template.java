@@ -39,9 +39,6 @@ public class Template {
     @Column(name = "template_owner", nullable = false)
     private Long templateOwner;
 
-    @Column(name = "template_rating")
-    private Double templateRating;
-
     @Column(name = "release_date")
     private LocalDateTime releaseDate;
 
@@ -50,7 +47,6 @@ public class Template {
 
     @Column(name = "cover_image_path")
     private String coverImagePath;
-
 
     @Column(name = "average_rating")
     private Double averageRating;
@@ -81,6 +77,10 @@ public class Template {
     
     @Column(name = "download_count")
     private Integer downloadCount = 0;
+
+    @OneToMany
+    @JoinColumn(name = "template_id", referencedColumnName = "templateid")
+    private List<Comment> comments = new ArrayList<>();
 
     public Template() {
         this.releaseDate = LocalDateTime.now();
@@ -117,9 +117,6 @@ public class Template {
 
     public Long getTemplateOwner() { return templateOwner; }
     public void setTemplateOwner(Long templateOwner) { this.templateOwner = templateOwner; }
-
-    public Double getTemplateRating() { return templateRating; }
-    public void setTemplateRating(Double templateRating) { this.templateRating = templateRating; }
 
     public LocalDateTime getReleaseDate() { return releaseDate; }
     public void setReleaseDate(LocalDateTime releaseDate) { this.releaseDate = releaseDate; }

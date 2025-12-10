@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import gtemp.gtemp_io.dto.FileDTO;
 import gtemp.gtemp_io.entity.*;
 import gtemp.gtemp_io.repository.TemplateImageRepository;
 import gtemp.gtemp_io.repository.TemplateRepository;
@@ -14,6 +15,7 @@ import gtemp.gtemp_io.service.UserService;
 import gtemp.gtemp_io.repository.PurchaseDownloadItemRepository;
 import gtemp.gtemp_io.repository.RatingItemRepository;
 
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -107,6 +109,7 @@ public class TemplateController {
             List<Template> templates = templateService.getAllTemplates();
 
             List<TemplateHomePageDTO> homepageDTOs = templates.stream()
+                    .filter(template -> Boolean.TRUE.equals(template.getVisibility()))
                     .map(template -> new TemplateHomePageDTO(
                             template.getId(),
                             template.getTemplateTitle(),
@@ -609,4 +612,244 @@ public class TemplateController {
         List<Template> templates = templateService.getTemplatesByOwner(userId);
         return ResponseEntity.ok(templates);
     }
-}
+
+    @GetMapping("/{id}/files")
+    public ResponseEntity<List<Map<String, Object>>> getTemplateFiles(@PathVariable Long id) {
+        Optional<Template> templateOpt = templateService.getTemplateById(id);
+        if (templateOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Collections.emptyList());
+        }
+
+        List<File> files = templateOpt.get().getFiles();
+        List<Map<String, Object>> fileDTOs = files.stream()
+                .map(file -> {
+                    Map<String, Object> fileMap = new HashMap<>();
+                    fileMap.put("id", file.getId());
+                    fileMap.put("fileName", file.getFileName());
+                    fileMap.put("filePath", file.getFilePath());
+                    fileMap.put("fileType", file.getFileType());
+                    fileMap.put("fileSize", file.getFileSize());
+                    return fileMap;
+                })
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(fileDTOs);
+    }
+
+    @Autowired
+    TemplateImageRepository templateImageRepository;
+
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Transactional
+    public ResponseEntity<Map<String, Object>> updateTemplate(
+            @PathVariable Long id,
+            @RequestPart("template") String templateJson,
+            @RequestPart(value = "coverImage", required = false) MultipartFile coverImage,
+            @RequestPart(value = "images", required = false) List<MultipartFile> images,
+            @RequestPart(value = "files", required = false) List<MultipartFile> files)
+    {
+        try {
+            Optional<Template> existingTemplateOpt = templateService.getTemplateById(id);
+            if (existingTemplateOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Template not found"));
+            }
+
+            Template existingTemplate = existingTemplateOpt.get();
+
+            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            System.out.println("Updating template ID: " + id);
+            System.out.println("Received template JSON: " + templateJson);
+
+            JsonNode rootNode = objectMapper.readTree(templateJson);
+
+            // Extract templateOwner
+            Long templateOwner = null;
+            if (rootNode.has("templateOwner") && !rootNode.get("templateOwner").isNull()) {
+                templateOwner = rootNode.get("templateOwner").asLong();
+                System.out.println("Found templateOwner in JSON: " + templateOwner);
+            }
+
+            // Extract filenames to delete (for images)
+            List<String> filenamesToDelete = new ArrayList<>();
+            if (rootNode.has("filenamesToDelete") && rootNode.get("filenamesToDelete").isArray()) {
+                for (JsonNode filenameNode : rootNode.get("filenamesToDelete")) {
+                    filenamesToDelete.add(filenameNode.asText());
+                }
+                System.out.println("Filenames to delete: " + filenamesToDelete);
+            }
+
+            // for file deletion
+            List<Long> fileIdsToDelete = new ArrayList<>();
+            if (rootNode.has("fileIdsToDelete") && rootNode.get("fileIdsToDelete").isArray()) {
+                for (JsonNode idNode : rootNode.get("fileIdsToDelete")) {
+                    fileIdsToDelete.add(idNode.asLong());
+                }
+                System.out.println("File IDs to delete: " + fileIdsToDelete);
+            }
+
+            // Remove custom fields before parsing to Template
+            ((ObjectNode) rootNode).remove("templateOwner");
+            ((ObjectNode) rootNode).remove("filenamesToDelete");
+            ((ObjectNode) rootNode).remove("fileIdsToDelete");
+
+            // Parse the cleaned JSON to Template
+            Template updatedTemplateData = objectMapper.readValue(rootNode.toString(), Template.class);
+
+            // Set templateOwner if provided
+            if (templateOwner != null) {
+                updatedTemplateData.setTemplateOwner(templateOwner);
+            }
+
+            // Handle image deletions
+            if (!filenamesToDelete.isEmpty()) {
+                System.out.println("=== DEBUG: STARTING DELETION ===");
+                System.out.println("Filenames to delete from frontend: " + filenamesToDelete);
+                System.out.println("Number of existing images: " + existingTemplate.getImages().size());
+
+                List<TemplateImage> imagesToRemove = new ArrayList<>();
+
+                // DEBUG: Print all existing images first
+                System.out.println("\n=== EXISTING IMAGES IN DATABASE ===");
+                int counter = 0;
+                for (TemplateImage img : existingTemplate.getImages()) {
+                    String imagePath = img.getImagePath();
+                    System.out.println("Image " + counter + ":");
+                    System.out.println("  Full path: '" + imagePath + "'");
+                    System.out.println("  Path length: " + imagePath.length());
+
+                    String filename = Paths.get(imagePath).getFileName().toString();
+
+                    System.out.println("Checking: DB='" + filename + "' vs Delete='" + filenamesToDelete + "'");
+
+                    // Check if it matches
+                    boolean match = filenamesToDelete.contains(filename);
+                    System.out.println("  Matches filenamesToDelete? " + match);
+
+                    if (match) {
+                        imagesToRemove.add(img);
+                        System.out.println("  ✅ WILL DELETE THIS IMAGE");
+                    }
+
+                    System.out.println();
+                    counter++;
+                }
+
+                System.out.println("=== MATCHING RESULTS ===");
+                System.out.println("Total images marked for deletion: " + imagesToRemove.size());
+
+                if (imagesToRemove.isEmpty()) {
+                    System.out.println("❌ WARNING: NO IMAGES MATCHED!");
+                    System.out.println("Possible issues:");
+                    System.out.println("1. Database filenames don't match frontend filenames");
+                    System.out.println("2. Check for spaces/encoding differences");
+                    System.out.println("3. Template might not have images loaded");
+                } else {
+                    // Remove from template (orphanRemoval will delete from DB)
+                    for (TemplateImage img : imagesToRemove) {
+                        System.out.println("Removing from template: " + img.getImagePath());
+                        existingTemplate.removeImage(img);
+                    }
+                    System.out.println("✅ Successfully removed " + imagesToRemove.size() + " images");
+                }
+
+                System.out.println("=== DEBUG: DELETION COMPLETE ===");
+            }
+
+            if (!fileIdsToDelete.isEmpty()) {
+                List<File> filesToRemove = existingTemplate.getFiles().stream()
+                        .filter(file -> fileIdsToDelete.contains(file.getId()))
+                        .collect(Collectors.toList());
+
+                for (File file : filesToRemove) {
+                    System.out.println("Deleting file ID: " + file.getId() + " - " + file.getFileName());
+                    existingTemplate.removeFile(file);
+                }
+            }
+
+            // Update template fields
+            existingTemplate.setTemplateTitle(updatedTemplateData.getTemplateTitle());
+            existingTemplate.setTemplateDesc(updatedTemplateData.getTemplateDesc());
+            existingTemplate.setPriceSetting(updatedTemplateData.getPriceSetting());
+            existingTemplate.setPrice(updatedTemplateData.getPrice());
+            existingTemplate.setVisibility(updatedTemplateData.getVisibility());
+            existingTemplate.setEngine(updatedTemplateData.getEngine());
+            existingTemplate.setType(updatedTemplateData.getType());
+            existingTemplate.setUpdateDate(LocalDateTime.now());
+
+            // Handle cover image update
+            if (coverImage != null && !coverImage.isEmpty()) {
+                String uploadsDir = "uploads/";
+                Files.createDirectories(Paths.get(uploadsDir));
+                String fileName = System.currentTimeMillis() + "_" +
+                        coverImage.getOriginalFilename().replace(" ", "_");
+                String fullFilePath = uploadsDir + fileName;
+                Files.copy(coverImage.getInputStream(), Paths.get(fullFilePath));
+                existingTemplate.setCoverImagePath("uploads/" + fileName);
+                System.out.println("Updated cover image: " + fileName);
+            }
+
+            // Add new images
+            if (images != null && !images.isEmpty()) {
+                System.out.println("Adding " + images.size() + " new images");
+                for (MultipartFile image : images) {
+                    if (!image.isEmpty()) {
+                        String uploadsDir = "uploads/";
+                        Files.createDirectories(Paths.get(uploadsDir));
+                        String fileName = System.currentTimeMillis() + "_" +
+                                image.getOriginalFilename().replace(" ", "_");
+                        String fullFilePath = uploadsDir + fileName;
+                        Files.copy(image.getInputStream(), Paths.get(fullFilePath));
+
+                        TemplateImage templateImage = new TemplateImage();
+                        templateImage.setImagePath("uploads/" + fileName);
+                        templateImage.setTemplate(existingTemplate);
+                        existingTemplate.addImage(templateImage);
+                        System.out.println("Added new image: " + fileName);
+                    }
+                }
+            }
+
+            // Add new files
+            if (files != null && !files.isEmpty()) {
+                System.out.println("Adding " + files.size() + " new files");
+                for (MultipartFile multipartFile : files) {
+                    if (!multipartFile.isEmpty()) {
+                        String uploadsDir = "uploads/";
+                        Files.createDirectories(Paths.get(uploadsDir));
+                        String fileName = System.currentTimeMillis() + "_" +
+                                multipartFile.getOriginalFilename().replace(" ", "_");
+                        String fullFilePath = uploadsDir + fileName;
+                        Files.copy(multipartFile.getInputStream(), Paths.get(fullFilePath));
+
+                        File fileEntity = new File();
+                        fileEntity.setFileName(multipartFile.getOriginalFilename());
+                        fileEntity.setFilePath("uploads/" + fileName);
+                        fileEntity.setFileSize(multipartFile.getSize());
+                        fileEntity.setFileType(multipartFile.getContentType());
+                        fileEntity.setTemplate(existingTemplate);
+
+                        existingTemplate.addFile(fileEntity);
+                        System.out.println("Added new file: " + fileName);
+                    }
+                }
+            }
+
+            // Save everything
+            Template savedTemplate = templateRepository.save(existingTemplate);
+            System.out.println("Template saved successfully with ID: " + savedTemplate.getId());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Template updated successfully!");
+            response.put("templateId", savedTemplate.getId());
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to update template: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+    }
