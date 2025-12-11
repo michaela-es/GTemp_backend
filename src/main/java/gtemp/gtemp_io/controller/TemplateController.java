@@ -657,6 +657,7 @@ public class TemplateController {
             @RequestPart(value = "coverImage", required = false) MultipartFile coverImage,
             @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @RequestPart(value = "files", required = false) List<MultipartFile> files)
+
     {
         try {
             Optional<Template> existingTemplateOpt = templateService.getTemplateById(id);
