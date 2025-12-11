@@ -221,7 +221,7 @@ public class TemplateController {
 
             double amountToDeduct = switch (template.getPriceSetting()) {
                 case "Paid" -> template.getPrice() != null ? template.getPrice() : 0;
-                case "₱0 or donation" -> donationAmount != null ? donationAmount : 0;
+                case "$0 or donation" -> donationAmount != null ? donationAmount : 0;
                 case "No Payment" -> 0;
                 default -> 0;
             };
@@ -239,7 +239,7 @@ public class TemplateController {
 
             PurchaseDownloadItem.ActionType actionType = switch (template.getPriceSetting()) {
                 case "Paid" -> PurchaseDownloadItem.ActionType.PURCHASED;
-                case "₱0 or donation" -> PurchaseDownloadItem.ActionType.DONATED;
+                case "$0 or donation" -> PurchaseDownloadItem.ActionType.DONATED;
                 case "No Payment" -> PurchaseDownloadItem.ActionType.FREE_DOWNLOAD;
                 default -> PurchaseDownloadItem.ActionType.FREE_DOWNLOAD;
             };
@@ -303,7 +303,7 @@ public class TemplateController {
                         || i.getActionType() == PurchaseDownloadItem.ActionType.DONATED);
 
         boolean isFree = template.getPriceSetting().equals("No Payment")
-                || template.getPriceSetting().equals("₱0 or donation");
+                || template.getPriceSetting().equals("$0 or donation");
 
         if (!hasPaid && !isFree) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
