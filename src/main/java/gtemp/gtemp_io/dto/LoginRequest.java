@@ -1,16 +1,9 @@
 package gtemp.gtemp_io.dto;
 
+import lombok.Data;
+
+@Data
 public class LoginRequest {
-    private String username;
+    private String identifier;
     private String password;
-
-    // Default constructor
-    public LoginRequest() {}
-
-    // Getters and setters
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
-
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
 }

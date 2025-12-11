@@ -74,4 +74,6 @@ public class User {
     public void setWallet(Double wallet) {
         this.wallet = wallet;
     }
+
+
 }

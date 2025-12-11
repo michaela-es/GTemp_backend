@@ -2,6 +2,7 @@ package gtemp.gtemp_io.controller;
 
 import gtemp.gtemp_io.dto.*;
 import gtemp.gtemp_io.entity.User;
+import gtemp.gtemp_io.repository.UserRepository;
 import gtemp.gtemp_io.security.jwt.JwtService;
 import gtemp.gtemp_io.service.UserService;
 import gtemp.gtemp_io.utils.SecurityUtil;
@@ -20,13 +21,15 @@ public class UserController {
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final SecurityUtil securityUtil;
+    private final UserRepository userRepository;
 
     public UserController(UserService userService, JwtService jwtService,
-                          PasswordEncoder passwordEncoder, SecurityUtil securityUtil) {
+                          PasswordEncoder passwordEncoder, SecurityUtil securityUtil, UserRepository userRepository) {
         this.userService = userService;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
         this.securityUtil = securityUtil;
+        this.userRepository = userRepository;
     }
 
     @PostMapping("/users/register")
@@ -54,7 +57,15 @@ public class UserController {
 
     @PostMapping("/login")
     public ResponseEntity<?> loginUser(@RequestBody LoginRequest loginRequest) {
-        User user = userService.authenticateUser(loginRequest.getUsername(), loginRequest.getPassword());
+        String identifier = loginRequest.getIdentifier();
+        String password = loginRequest.getPassword();
+
+        User user = userRepository.findByUsernameOrEmail(identifier)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new RuntimeException("Invalid password");
+        }
 
         String token = jwtService.generateToken(user.getUserID(), user.getUsername());
 
@@ -102,5 +113,23 @@ public class UserController {
         userService.saveUser(user);
 
         return ResponseEntity.ok(Collections.singletonMap("wallet", user.getWallet()));
+    }
+
+    @PostMapping("/users/change-password")
+    public ResponseEntity<?> changePassword(@RequestBody ChangePasswordRequest request) {
+        Long currentUserId = securityUtil.getCurrentUserId();
+
+        User user = userService.getUserById(currentUserId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            return ResponseEntity.status(400)
+                    .body(Collections.singletonMap("message", "Current password is incorrect"));
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userService.saveUser(user);
+
+        return ResponseEntity.ok(Collections.singletonMap("message", "Password changed successfully"));
     }
 }

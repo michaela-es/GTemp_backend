@@ -2,6 +2,7 @@ package gtemp.gtemp_io.service;
 
 import gtemp.gtemp_io.entity.User;
 import gtemp.gtemp_io.repository.UserRepository;
+import lombok.Getter;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -11,6 +12,7 @@ import java.util.Optional;
 public class UserService {
 
     private final UserRepository userRepository;
+    @Getter
     private final PasswordEncoder passwordEncoder;
 
     public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
@@ -29,63 +31,44 @@ public class UserService {
 
     /**
      * Authenticate user by username or email and password
-     */
-    public User authenticateUser(String usernameOrEmail, String password) {
-        User user = userRepository.findByUsername(usernameOrEmail);
-        if (user == null) {
-            user = userRepository.findByEmail(usernameOrEmail);
-        }
+     */public User authenticateUser(String identifier, String password) {
+            // Find user by username OR email
+            User user = userRepository.findByUsernameOrEmail(identifier)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (user == null) {
-            throw new RuntimeException("User not found");
-        }
+            // Check password
+            if (!passwordEncoder.matches(password, user.getPassword())) {
+                throw new RuntimeException("Invalid password");
+            }
 
-        if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new RuntimeException("Invalid password");
-        }
-
-        return user;
-    }
-
-    /**
-     * Find user by ID
-     */
-    public Optional<User> getUserById(Long id) {
-        return userRepository.findById(id);
-    }
-
-    /**
-     * Find user by email
-     */
-    public Optional<User> getUserByEmail(String email) {
-        return Optional.ofNullable(userRepository.findByEmail(email));
-    }
+            return user;
+     }
 
     /**
      * Save or update user
      */
+
+    public Optional<User> getUserById(Long userId) {
+        return userRepository.findById(userId);
+    }
+
     public User saveUser(User user) {
         return userRepository.save(user);
     }
 
-    public User updateUser(Long userID, String username, String email) {
-        User user = userRepository.findById(userID)
+    public User updateUser(Long currentUserId, String username, String email) {
+        User user = userRepository.findById(currentUserId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (username != null && !username.isEmpty()) {
+        if (username != null && !username.trim().isEmpty()) {
             user.setUsername(username);
         }
 
-        if (email != null && !email.isEmpty()) {
+        if (email != null && !email.trim().isEmpty()) {
             user.setEmail(email);
         }
 
         return userRepository.save(user);
     }
-
-    public PasswordEncoder getPasswordEncoder() {
-        return this.passwordEncoder;
-    }
-
 
 }
