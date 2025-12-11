@@ -115,6 +115,7 @@ public class UserController {
         return ResponseEntity.ok(Collections.singletonMap("wallet", user.getWallet()));
     }
 
+
     @PostMapping("/users/change-password")
     public ResponseEntity<?> changePassword(@RequestBody ChangePasswordRequest request) {
         Long currentUserId = securityUtil.getCurrentUserId();
