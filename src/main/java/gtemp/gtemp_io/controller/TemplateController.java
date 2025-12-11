@@ -9,12 +9,14 @@ import gtemp.gtemp_io.dto.FileDTO;
 import gtemp.gtemp_io.entity.*;
 import gtemp.gtemp_io.repository.TemplateImageRepository;
 import gtemp.gtemp_io.repository.TemplateRepository;
+import gtemp.gtemp_io.security.jwt.JwtService;
 import gtemp.gtemp_io.service.TemplateImageService;
 import gtemp.gtemp_io.service.TemplateService;
 import gtemp.gtemp_io.service.UserService;
 import gtemp.gtemp_io.repository.PurchaseDownloadItemRepository;
 import gtemp.gtemp_io.repository.RatingItemRepository;
 
+import gtemp.gtemp_io.utils.SecurityUtil;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
@@ -42,6 +44,8 @@ import java.util.zip.ZipOutputStream;
 @CrossOrigin(origins = "http://localhost:5173")
 public class TemplateController {
 
+
+    private final SecurityUtil securityUtil;
     @Autowired
     private TemplateService templateService;
 
@@ -63,6 +67,10 @@ public class TemplateController {
     @Autowired
     private TemplateImageService templateImageService;
 
+    public TemplateController(SecurityUtil securityUtil) {
+        this.securityUtil = securityUtil;
+    }
+
 
     @GetMapping("/{id}/images")
     public ResponseEntity<?> getTemplateImages(@PathVariable Long id) {
@@ -75,43 +83,11 @@ public class TemplateController {
         return ResponseEntity.ok(imagePaths);
     }
 
-    @GetMapping("/debug-uploads")
-    public ResponseEntity<Map<String, Object>> debugUploads() {
-        Map<String, Object> debugInfo = new HashMap<>();
-        try {
-            String projectRoot = System.getProperty("user.dir");
-            String uploadsPath = projectRoot + "/uploads/";
-            debugInfo.put("projectRoot", projectRoot);
-            debugInfo.put("uploadsAbsolutePath", uploadsPath);
-            debugInfo.put("uploadsAbsoluteExists", Files.exists(Paths.get(uploadsPath)));
-
-            if (Files.exists(Paths.get(uploadsPath))) {
-                List<String> files = Files.list(Paths.get(uploadsPath))
-                        .map(path -> path.getFileName().toString())
-                        .collect(Collectors.toList());
-                debugInfo.put("filesInUploads", files);
-            }
-        } catch (Exception e) {
-            debugInfo.put("error", e.getMessage());
-        }
-        return ResponseEntity.ok(debugInfo);
-    }
-
     @PostMapping("/batch")
     public ResponseEntity<List<Template>> getTemplatesByIds(@RequestBody List<Long> templateIds) {
         List<Template> templates = templateRepository.findAllById(templateIds);
         return ResponseEntity.ok(templates);
     }
-
-//    @GetMapping
-//    public ResponseEntity<List<Template>> getAllTemplates() {
-//        try {
-//            List<Template> templates = templateService.getAllTemplates();
-//            return ResponseEntity.ok(templates);
-//        } catch (Exception e) {
-//            return ResponseEntity.status(500).build();
-//        }
-//        }
 
     @GetMapping("/homepage")
     public ResponseEntity<List<TemplateHomePageDTO>> getHomepageTemplates() {
@@ -150,6 +126,23 @@ public class TemplateController {
 
         Template template = templateOpt.get();
 
+        // for private templates
+        if (Boolean.FALSE.equals(template.getVisibility())) {
+            try {
+                Long currentUserId = securityUtil.getCurrentUserId();
+
+                if (!currentUserId.equals(template.getTemplateOwner())) {
+                    return ResponseEntity.status(403).body(Map.of(
+                            "error", "This template is private. Only the owner can view it."
+                    ));
+                }
+            } catch (RuntimeException e) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "error", "This template is private. Please login to view."
+                ));
+            }
+        }
+
         // compute average on the fly if not saved
         if (template.getAverageRating() == null) {
             List<RatingItem> ratings = ratingItemRepository.findAll()
@@ -180,7 +173,6 @@ public class TemplateController {
 
         return ResponseEntity.ok(template);
     }
-
 
     @PostMapping("/{id}/purchase")
     public ResponseEntity<?> purchaseTemplate(

@@ -7,7 +7,6 @@ import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
-
 import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.HashMap;
@@ -27,31 +26,31 @@ public class JwtService {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("username", username);
-        return generateToken(claims);
-    }
 
-    public String generateToken(UserDetails userDetails) {
-        return generateToken(new HashMap<>(), userDetails);
-    }
-
-    public String generateToken(Map<String, Object> extraClaims) {
-        return Jwts.builder()
-                .claims(extraClaims)
-                .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
-                .signWith(getSignInKey())
-                .compact();
-    }
-
-    public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
-        Map<String, Object> claims = new HashMap<>(extraClaims);
         return Jwts.builder()
                 .claims(claims)
-                .subject(userDetails.getUsername()) // Usually email
+                .subject(userId.toString())
                 .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
                 .signWith(getSignInKey())
                 .compact();
+    }
+
+    public Long extractUserId(String token) {
+        return extractClaim(token, claims -> {
+            Object userIdObj = claims.get("userId");
+            if (userIdObj != null) {
+                if (userIdObj instanceof Integer) {
+                    return ((Integer) userIdObj).longValue();
+                } else if (userIdObj instanceof Long) {
+                    return (Long) userIdObj;
+                } else if (userIdObj instanceof String) {
+                    return Long.parseLong((String) userIdObj);
+                }
+            }
+            String subject = claims.getSubject();
+            return Long.parseLong(subject);
+        });
     }
 
     public boolean isTokenValid(String token) {
@@ -63,39 +62,16 @@ public class JwtService {
     }
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
+        final Long userId = extractUserId(token);
         final String username = extractUsername(token);
-        return (username != null && username.equals(userDetails.getUsername())) && !isTokenExpired(token);
-    }
-
-    public Long extractUserId(String token) {
-        return extractClaim(token, claims -> {
-            Object userIdObj = claims.get("userId");
-            if (userIdObj instanceof Integer) {
-                return ((Integer) userIdObj).longValue();
-            } else if (userIdObj instanceof Long) {
-                return (Long) userIdObj;
-            } else if (userIdObj instanceof String) {
-                return Long.parseLong((String) userIdObj);
-            }
-            throw new RuntimeException("Invalid userID type in token");
-        });
-    }
-
-    public String extractUsernameFromToken(String token) {
-        return extractClaim(token, claims -> {
-            Object usernameObj = claims.get("username");
-            if (usernameObj != null) {
-                return usernameObj.toString();
-            }
-            return claims.getSubject();
-        });
+        return (userId != null && username != null) && !isTokenExpired(token);
     }
 
     public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
+        return extractClaim(token, claims -> claims.get("username", String.class));
     }
 
-    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+    private <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
@@ -119,23 +95,5 @@ public class JwtService {
 
     private Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
-    }
-
-    public boolean validateUserPermission(String token, Long requiredUserId) {
-        try {
-            Long tokenUserId = extractUserId(token);
-            return tokenUserId.equals(requiredUserId);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    public Map<String, Object> getUserInfoFromToken(String token) {
-        Claims claims = extractAllClaims(token);
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put("userId", extractUserId(token));
-        userInfo.put("username", extractUsernameFromToken(token));
-        userInfo.put("email", claims.getSubject()); // Assuming subject is email
-        return userInfo;
     }
 }
