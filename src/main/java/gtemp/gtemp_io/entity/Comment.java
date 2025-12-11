@@ -13,7 +13,7 @@ public class Comment {
     @Column(name = "template_id", nullable = false)
     private Long templateID;
 
-    @Column(name = "parent_id")
+    @Column(name = "parent_id", nullable = true)
     private Long parentId;
 
     @Column(nullable = false, columnDefinition = "TEXT")

@@ -1,4 +1,3 @@
-//TemplateController.js
 package gtemp.gtemp_io.controller;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -15,7 +14,6 @@ import gtemp.gtemp_io.service.TemplateService;
 import gtemp.gtemp_io.service.UserService;
 import gtemp.gtemp_io.repository.PurchaseDownloadItemRepository;
 import gtemp.gtemp_io.repository.RatingItemRepository;
-
 import gtemp.gtemp_io.utils.SecurityUtil;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpStatus;
 import gtemp.gtemp_io.dto.TemplateHomePageDTO;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -41,11 +40,11 @@ import java.util.zip.ZipOutputStream;
 
 @RestController
 @RequestMapping("/api/templates")
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = "*")
 public class TemplateController {
 
-
     private final SecurityUtil securityUtil;
+
     @Autowired
     private TemplateService templateService;
 
@@ -67,10 +66,12 @@ public class TemplateController {
     @Autowired
     private TemplateImageService templateImageService;
 
+    @Autowired
+    TemplateImageRepository templateImageRepository;
+
     public TemplateController(SecurityUtil securityUtil) {
         this.securityUtil = securityUtil;
     }
-
 
     @GetMapping("/{id}/images")
     public ResponseEntity<?> getTemplateImages(@PathVariable Long id) {
@@ -126,7 +127,6 @@ public class TemplateController {
 
         Template template = templateOpt.get();
 
-        // for private templates
         if (Boolean.FALSE.equals(template.getVisibility())) {
             try {
                 Long currentUserId = securityUtil.getCurrentUserId();
@@ -143,7 +143,6 @@ public class TemplateController {
             }
         }
 
-        // compute average on the fly if not saved
         if (template.getAverageRating() == null) {
             List<RatingItem> ratings = ratingItemRepository.findAll()
                     .stream()
@@ -152,7 +151,7 @@ public class TemplateController {
 
             double avg = ratings.stream().mapToInt(RatingItem::getRatingValue).average().orElse(0.0);
             template.setAverageRating(avg);
-            templateService.saveTemplate(template); // persist it
+            templateService.saveTemplate(template);
         }
 
         if (template.getTemplateOwner() != null) {
@@ -177,12 +176,13 @@ public class TemplateController {
     @PostMapping("/{id}/purchase")
     public ResponseEntity<?> purchaseTemplate(
             @PathVariable Long id,
-            @RequestParam Long userID,
             @RequestParam(required = false) Double donationAmount
     ) {
         try {
+            Long userId = securityUtil.getCurrentUserId();
+
             Optional<Template> templateOpt = templateService.getTemplateById(id);
-            Optional<User> userOpt = userService.getUserById(userID);
+            Optional<User> userOpt = userService.getUserById(userId);
 
             if (templateOpt.isEmpty())
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Template not found");
@@ -268,85 +268,88 @@ public class TemplateController {
         }
     }
 
-
-
     @GetMapping("/{id}/download/free")
     public ResponseEntity<Resource> downloadFreeTemplate(
-            @PathVariable Long id,
-            @RequestParam Long userID
+            @PathVariable Long id
     ) throws IOException {
+        try {
+            Long userId = securityUtil.getCurrentUserId();
 
-        Optional<Template> templateOpt = templateService.getTemplateById(id);
-        Optional<User> userOpt = userService.getUserById(userID);
+            Optional<Template> templateOpt = templateService.getTemplateById(id);
+            Optional<User> userOpt = userService.getUserById(userId);
 
-        if (templateOpt.isEmpty()) return ResponseEntity.notFound().build();
-        if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+            if (templateOpt.isEmpty()) return ResponseEntity.notFound().build();
+            if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
 
-        Template template = templateOpt.get();
-        User user = userOpt.get();
-        List<File> files = template.getFiles();
+            Template template = templateOpt.get();
+            User user = userOpt.get();
+            List<File> files = template.getFiles();
 
-        if (files == null || files.isEmpty()) return ResponseEntity.badRequest().build();
+            if (files == null || files.isEmpty()) return ResponseEntity.badRequest().build();
 
-        List<PurchaseDownloadItem> existingItems = purchaseDownloadItemRepository.findByUserAndTemplate(user, template);
+            List<PurchaseDownloadItem> existingItems = purchaseDownloadItemRepository.findByUserAndTemplate(user, template);
 
-        boolean hasPaid = existingItems.stream()
-                .anyMatch(i -> i.getActionType() == PurchaseDownloadItem.ActionType.PURCHASED
-                        || i.getActionType() == PurchaseDownloadItem.ActionType.DONATED);
+            boolean hasPaid = existingItems.stream()
+                    .anyMatch(i -> i.getActionType() == PurchaseDownloadItem.ActionType.PURCHASED
+                            || i.getActionType() == PurchaseDownloadItem.ActionType.DONATED);
 
-        boolean isFree = template.getPriceSetting().equals("No Payment")
-                || template.getPriceSetting().equals("₱0 or donation");
+            boolean isFree = template.getPriceSetting().equals("No Payment")
+                    || template.getPriceSetting().equals("₱0 or donation");
 
-        if (!hasPaid && !isFree) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(new ByteArrayResource("Payment required".getBytes()));
-        }
-
-        boolean alreadyDownloaded = existingItems.stream()
-                .anyMatch(i -> i.getActionType() == PurchaseDownloadItem.ActionType.FREE_DOWNLOAD);
-
-        if (!hasPaid && !alreadyDownloaded) {
-            PurchaseDownloadItem item = new PurchaseDownloadItem();
-            item.setUser(user);
-            item.setTemplate(template);
-            item.setActionType(PurchaseDownloadItem.ActionType.FREE_DOWNLOAD);
-            item.setActionDate(LocalDateTime.now());
-            item.setAmountPaid(null);
-            purchaseDownloadItemRepository.save(item);
-
-            template.incrementDownloadCount();
-            templateService.saveTemplate(template);
-        }
-
-        // ZIP creation code remains unchanged
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
-            for (File file : files) {
-                String filePath = file.getFilePath().replace("\\", "/");
-                Path absolutePath = resolveFilePath(filePath);
-
-                if (!Files.exists(absolutePath)) {
-                    Path alternative1 = Paths.get("uploads", Paths.get(file.getFilePath()).getFileName().toString());
-                    Path alternative2 = Paths.get(System.getProperty("user.dir"), "uploads", Paths.get(file.getFilePath()).getFileName().toString());
-                    if (Files.exists(alternative1)) absolutePath = alternative1;
-                    else if (Files.exists(alternative2)) absolutePath = alternative2;
-                    else continue;
-                }
-
-                zos.putNextEntry(new ZipEntry(file.getFileName()));
-                Files.copy(absolutePath, zos);
-                zos.closeEntry();
+            if (!hasPaid && !isFree) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new ByteArrayResource("Payment required".getBytes()));
             }
+
+            boolean alreadyDownloaded = existingItems.stream()
+                    .anyMatch(i -> i.getActionType() == PurchaseDownloadItem.ActionType.FREE_DOWNLOAD);
+
+            if (!hasPaid && !alreadyDownloaded) {
+                PurchaseDownloadItem item = new PurchaseDownloadItem();
+                item.setUser(user);
+                item.setTemplate(template);
+                item.setActionType(PurchaseDownloadItem.ActionType.FREE_DOWNLOAD);
+                item.setActionDate(LocalDateTime.now());
+                item.setAmountPaid(null);
+                purchaseDownloadItemRepository.save(item);
+
+                template.incrementDownloadCount();
+                templateService.saveTemplate(template);
+            }
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+                for (File file : files) {
+                    String filePath = file.getFilePath().replace("\\", "/");
+                    Path absolutePath = resolveFilePath(filePath);
+
+                    if (!Files.exists(absolutePath)) {
+                        Path alternative1 = Paths.get("uploads", Paths.get(file.getFilePath()).getFileName().toString());
+                        Path alternative2 = Paths.get(System.getProperty("user.dir"), "uploads", Paths.get(file.getFilePath()).getFileName().toString());
+                        if (Files.exists(alternative1)) absolutePath = alternative1;
+                        else if (Files.exists(alternative2)) absolutePath = alternative2;
+                        else continue;
+                    }
+
+                    zos.putNextEntry(new ZipEntry(file.getFileName()));
+                    Files.copy(absolutePath, zos);
+                    zos.closeEntry();
+                }
+            }
+
+            ByteArrayResource resource = new ByteArrayResource(baos.toByteArray());
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + template.getTemplateTitle().replaceAll("[^a-zA-Z0-9._-]", "_") + ".zip\"")
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(resource);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ByteArrayResource(("Download failed: " + e.getMessage()).getBytes()));
         }
-
-        ByteArrayResource resource = new ByteArrayResource(baos.toByteArray());
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + template.getTemplateTitle().replaceAll("[^a-zA-Z0-9._-]", "_") + ".zip\"")
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(resource);
     }
-
 
     private Path resolveFilePath(String filePath) {
         String normalizedPath = filePath.replace("\\", "/");
@@ -370,24 +373,30 @@ public class TemplateController {
         return Paths.get(projectRoot, normalizedPath);
     }
 
-    @GetMapping("/user/{userID}/library")
-    public ResponseEntity<List<PurchaseDownloadItem>> getUserLibrary(@PathVariable Long userID) {
-        Optional<User> userOpt = userService.getUserById(userID);
-        if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    @GetMapping("/user/library")
+    public ResponseEntity<List<PurchaseDownloadItem>> getUserLibrary() {
+        try {
+            Long userId = securityUtil.getCurrentUserId();
+            Optional<User> userOpt = userService.getUserById(userId);
+            if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
 
-        List<PurchaseDownloadItem> items = purchaseDownloadItemRepository.findByUserOrderByActionDateDesc(userOpt.get());
-        return ResponseEntity.ok(items);
+            List<PurchaseDownloadItem> items = purchaseDownloadItemRepository.findByUserOrderByActionDateDesc(userOpt.get());
+            return ResponseEntity.ok(items);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
     }
 
     @PostMapping("/{templateId}/rate")
     public ResponseEntity<?> rateTemplate(
             @PathVariable Long templateId,
-            @RequestParam Long userID,
             @RequestParam Integer ratingValue
     ) {
         try {
+            Long userId = securityUtil.getCurrentUserId();
+
             Optional<Template> templateOpt = templateService.getTemplateById(templateId);
-            Optional<User> userOpt = userService.getUserById(userID);
+            Optional<User> userOpt = userService.getUserById(userId);
 
             if (templateOpt.isEmpty()) return ResponseEntity.status(404).body("Template not found");
             if (userOpt.isEmpty()) return ResponseEntity.status(404).body("User not found");
@@ -421,44 +430,52 @@ public class TemplateController {
         }
     }
 
-
     @GetMapping("/{templateId}/rating")
     public ResponseEntity<?> getUserRating(
-            @PathVariable Long templateId,
-            @RequestParam Long userID
+            @PathVariable Long templateId
     ) {
-        Optional<Template> templateOpt = templateService.getTemplateById(templateId);
-        Optional<User> userOpt = userService.getUserById(userID);
+        try {
+            Long userId = securityUtil.getCurrentUserId();
 
-        if (templateOpt.isEmpty() || userOpt.isEmpty()) return ResponseEntity.ok(Map.of("ratingValue", 0));
+            Optional<Template> templateOpt = templateService.getTemplateById(templateId);
+            Optional<User> userOpt = userService.getUserById(userId);
 
-        Optional<RatingItem> ratingItem = ratingItemRepository.findByUserAndTemplate(userOpt.get(), templateOpt.get());
-        int value = ratingItem.map(RatingItem::getRatingValue).orElse(0);
+            if (templateOpt.isEmpty() || userOpt.isEmpty()) return ResponseEntity.ok(Map.of("ratingValue", 0));
 
-        return ResponseEntity.ok(Map.of("ratingValue", value));
+            Optional<RatingItem> ratingItem = ratingItemRepository.findByUserAndTemplate(userOpt.get(), templateOpt.get());
+            int value = ratingItem.map(RatingItem::getRatingValue).orElse(0);
+
+            return ResponseEntity.ok(Map.of("ratingValue", value));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of("ratingValue", 0));
+        }
     }
 
-    @GetMapping("/user/{userID}/rated")
-    public ResponseEntity<List<RatingItem>> getUserRatedTemplates(@PathVariable Long userID) {
-        Optional<User> userOpt = userService.getUserById(userID);
-        if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    @GetMapping("/user/rated")
+    public ResponseEntity<List<RatingItem>> getUserRatedTemplates() {
+        try {
+            Long userId = securityUtil.getCurrentUserId();
 
-        User user = userOpt.get();
+            Optional<User> userOpt = userService.getUserById(userId);
+            if (userOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
 
-        // Fetch all templates
-        List<Template> templates = templateService.getAllTemplates();
+            User user = userOpt.get();
 
-        List<RatingItem> ratedItems = new ArrayList<>();
+            List<Template> templates = templateService.getAllTemplates();
 
-        for (Template template : templates) {
-            ratingItemRepository.findByUserAndTemplate(user, template)
-                    .ifPresent(ratedItems::add);
+            List<RatingItem> ratedItems = new ArrayList<>();
+
+            for (Template template : templates) {
+                ratingItemRepository.findByUserAndTemplate(user, template)
+                        .ifPresent(ratedItems::add);
+            }
+
+            ratedItems.sort((a, b) -> b.getRatedAt().compareTo(a.getRatedAt()));
+
+            return ResponseEntity.ok(ratedItems);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-
-        // Optionally sort by ratedAt descending
-        ratedItems.sort((a, b) -> b.getRatedAt().compareTo(a.getRatedAt()));
-
-        return ResponseEntity.ok(ratedItems);
     }
 
     @GetMapping("/{templateId}/rated-users")
@@ -470,13 +487,11 @@ public class TemplateController {
 
         Template template = templateOpt.get();
 
-        // Fetch all ratings for this template
         List<RatingItem> ratings = ratingItemRepository.findAll()
                 .stream()
                 .filter(r -> r.getTemplate().getId().equals(templateId))
                 .collect(Collectors.toList());
 
-        // Map ratings to a list of simple JSON objects
         List<Map<String, Object>> result = ratings.stream().map(r -> {
             Map<String, Object> map = new HashMap<>();
             map.put("userID", r.getUser().getUserID());
@@ -488,7 +503,6 @@ public class TemplateController {
 
         return ResponseEntity.ok(result);
     }
-
 
     private void updateTemplateAverageRating(Template template) {
         List<RatingItem> ratings = ratingItemRepository.findAll()
@@ -519,15 +533,11 @@ public class TemplateController {
         try {
             objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-
             System.out.println("Received template JSON: " + templateJson);
             JsonNode rootNode = objectMapper.readTree(templateJson);
 
-            Long templateOwner = null;
-            if (rootNode.has("templateOwner") && !rootNode.get("templateOwner").isNull()) {
-                templateOwner = rootNode.get("templateOwner").asLong();
-                System.out.println("Found templateOwner in JSON: " + templateOwner);
-            }
+            Long templateOwner = securityUtil.getCurrentUserId();
+            System.out.println("Template owner from JWT: " + templateOwner);
 
             ((ObjectNode) rootNode).remove("templateOwner");
 
@@ -540,6 +550,7 @@ public class TemplateController {
 
             System.out.println("Template after manual set - owner: " + template.getTemplateOwner());
             System.out.println("=== END DEBUG ===");
+
             if (coverImage != null && !coverImage.isEmpty()) {
                 String uploadsDir = "uploads/";
                 Files.createDirectories(Paths.get(uploadsDir));
@@ -609,10 +620,15 @@ public class TemplateController {
         }
     }
 
-    @GetMapping("/user/{userId}/my-templates")
-    public ResponseEntity<List<Template>> getUserTemplates(@PathVariable Long userId) {
-        List<Template> templates = templateService.getTemplatesByOwner(userId);
-        return ResponseEntity.ok(templates);
+    @GetMapping("/user/my-templates")
+    public ResponseEntity<List<Template>> getUserTemplates() {
+        try {
+            Long userId = securityUtil.getCurrentUserId();
+            List<Template> templates = templateService.getTemplatesByOwner(userId);
+            return ResponseEntity.ok(templates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
     }
 
     @GetMapping("/{id}/files")
@@ -638,9 +654,6 @@ public class TemplateController {
         return ResponseEntity.ok(fileDTOs);
     }
 
-    @Autowired
-    TemplateImageRepository templateImageRepository;
-
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Transactional
     public ResponseEntity<Map<String, Object>> updateTemplate(
@@ -649,10 +662,11 @@ public class TemplateController {
             @RequestPart(value = "coverImage", required = false) MultipartFile coverImage,
             @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @RequestPart(value = "files", required = false) List<MultipartFile> files)
-
     {
         try {
+            Long currentUserId = securityUtil.getCurrentUserId();
             Optional<Template> existingTemplateOpt = templateService.getTemplateById(id);
+
             if (existingTemplateOpt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Template not found"));
@@ -660,18 +674,16 @@ public class TemplateController {
 
             Template existingTemplate = existingTemplateOpt.get();
 
+            if (!currentUserId.equals(existingTemplate.getTemplateOwner())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("error", "You can only edit your own templates"));
+            }
+
             objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
             System.out.println("Updating template ID: " + id);
             System.out.println("Received template JSON: " + templateJson);
 
             JsonNode rootNode = objectMapper.readTree(templateJson);
-
-            // Extract templateOwner
-            Long templateOwner = null;
-            if (rootNode.has("templateOwner") && !rootNode.get("templateOwner").isNull()) {
-                templateOwner = rootNode.get("templateOwner").asLong();
-                System.out.println("Found templateOwner in JSON: " + templateOwner);
-            }
 
             // Extract filenames to delete (for images)
             List<String> filenamesToDelete = new ArrayList<>();
@@ -696,15 +708,8 @@ public class TemplateController {
             ((ObjectNode) rootNode).remove("filenamesToDelete");
             ((ObjectNode) rootNode).remove("fileIdsToDelete");
 
-            // Parse the cleaned JSON to Template
             Template updatedTemplateData = objectMapper.readValue(rootNode.toString(), Template.class);
 
-            // Set templateOwner if provided
-            if (templateOwner != null) {
-                updatedTemplateData.setTemplateOwner(templateOwner);
-            }
-
-            // Handle image deletions
             if (!filenamesToDelete.isEmpty()) {
                 System.out.println("=== DEBUG: STARTING DELETION ===");
                 System.out.println("Filenames to delete from frontend: " + filenamesToDelete);
@@ -712,7 +717,6 @@ public class TemplateController {
 
                 List<TemplateImage> imagesToRemove = new ArrayList<>();
 
-                // DEBUG: Print all existing images first
                 System.out.println("\n=== EXISTING IMAGES IN DATABASE ===");
                 int counter = 0;
                 for (TemplateImage img : existingTemplate.getImages()) {
@@ -725,7 +729,6 @@ public class TemplateController {
 
                     System.out.println("Checking: DB='" + filename + "' vs Delete='" + filenamesToDelete + "'");
 
-                    // Check if it matches
                     boolean match = filenamesToDelete.contains(filename);
                     System.out.println("  Matches filenamesToDelete? " + match);
 
@@ -748,7 +751,6 @@ public class TemplateController {
                     System.out.println("2. Check for spaces/encoding differences");
                     System.out.println("3. Template might not have images loaded");
                 } else {
-                    // Remove from template (orphanRemoval will delete from DB)
                     for (TemplateImage img : imagesToRemove) {
                         System.out.println("Removing from template: " + img.getImagePath());
                         existingTemplate.removeImage(img);
@@ -770,7 +772,6 @@ public class TemplateController {
                 }
             }
 
-            // Update template fields
             existingTemplate.setTemplateTitle(updatedTemplateData.getTemplateTitle());
             existingTemplate.setTemplateDesc(updatedTemplateData.getTemplateDesc());
             existingTemplate.setPriceSetting(updatedTemplateData.getPriceSetting());
@@ -780,7 +781,6 @@ public class TemplateController {
             existingTemplate.setType(updatedTemplateData.getType());
             existingTemplate.setUpdateDate(LocalDateTime.now());
 
-            // Handle cover image update
             if (coverImage != null && !coverImage.isEmpty()) {
                 String uploadsDir = "uploads/";
                 Files.createDirectories(Paths.get(uploadsDir));
@@ -792,7 +792,6 @@ public class TemplateController {
                 System.out.println("Updated cover image: " + fileName);
             }
 
-            // Add new images
             if (images != null && !images.isEmpty()) {
                 System.out.println("Adding " + images.size() + " new images");
                 for (MultipartFile image : images) {
@@ -813,7 +812,6 @@ public class TemplateController {
                 }
             }
 
-            // Add new files
             if (files != null && !files.isEmpty()) {
                 System.out.println("Adding " + files.size() + " new files");
                 for (MultipartFile multipartFile : files) {
@@ -838,7 +836,6 @@ public class TemplateController {
                 }
             }
 
-            // Save everything
             Template savedTemplate = templateRepository.save(existingTemplate);
             System.out.println("Template saved successfully with ID: " + savedTemplate.getId());
 
@@ -855,4 +852,4 @@ public class TemplateController {
             return ResponseEntity.badRequest().body(errorResponse);
         }
     }
-    }
+}
