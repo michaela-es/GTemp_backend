@@ -1,5 +1,6 @@
 package gtemp.gtemp_io.controller;
 
+import gtemp.gtemp_io.dto.WishlistItemDTO;
 import gtemp.gtemp_io.entity.WishlistItem;
 import gtemp.gtemp_io.service.WishlistService;
 import gtemp.gtemp_io.utils.SecurityUtil;
@@ -21,10 +22,17 @@ public class WishlistController {
     @Autowired
     private SecurityUtil securityUtil;
 
+//    @GetMapping("/my-wishlist")
+//    public ResponseEntity<List<WishlistItem>> getMyWishlist() {
+//        Long userId = securityUtil.getCurrentUserId();
+//        List<WishlistItem> wishlist = wishlistService.getUserWishlist(userId);
+//        return ResponseEntity.ok(wishlist);
+//    }
+
     @GetMapping("/my-wishlist")
-    public ResponseEntity<List<WishlistItem>> getMyWishlist() {
+    public ResponseEntity<List<WishlistItemDTO>> getMyWishlist() {
         Long userId = securityUtil.getCurrentUserId();
-        List<WishlistItem> wishlist = wishlistService.getUserWishlist(userId);
+        List<WishlistItemDTO> wishlist = wishlistService.getUserWishlist(userId);
         return ResponseEntity.ok(wishlist);
     }
 

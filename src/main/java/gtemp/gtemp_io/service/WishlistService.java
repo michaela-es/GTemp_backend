@@ -1,6 +1,7 @@
 //WishlistService.java
 package gtemp.gtemp_io.service;
 
+import gtemp.gtemp_io.dto.WishlistItemDTO;
 import gtemp.gtemp_io.entity.Template;
 import gtemp.gtemp_io.entity.WishlistItem;
 import gtemp.gtemp_io.repository.WishlistRepository;
@@ -10,6 +11,7 @@ import gtemp.gtemp_io.repository.TemplateRepository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class WishlistService {
@@ -19,7 +21,10 @@ public class WishlistService {
 
     @Autowired
     private TemplateRepository templateRepository;
-    
+
+    @Autowired
+    private TemplateService templateService;
+
     public boolean isInWishlist(Long userId, Long templateId) {
         return wishlistRepository.existsByUserIdAndTemplateId(userId, templateId);
     }
@@ -61,8 +66,25 @@ public class WishlistService {
 
 
 
-    public List<WishlistItem> getUserWishlist(Long userId) {
-        return wishlistRepository.findByUserId(userId);
+//    public List<WishlistItem> getUserWishlist(Long userId) {
+//        return wishlistRepository.findByUserId(userId);
+//    }
+
+    public List<WishlistItemDTO> getUserWishlist(Long userId) {
+        List<WishlistItem> wishlistItems = wishlistRepository.findByUserId(userId);
+
+        return wishlistItems.stream()
+                .map(wishlistItem -> {
+                    Template template = templateService.getTemplateById(wishlistItem.getTemplateId())
+                            .orElseThrow(() -> new RuntimeException("Template not found"));
+
+                    return new WishlistItemDTO(
+                            wishlistItem.getTemplateId(),
+                            template.getTemplateTitle(),
+                            template.getCoverImagePath()
+                    );
+                })
+                .collect(Collectors.toList());
     }
 
     public long getWishlistCount(Long templateId) {
