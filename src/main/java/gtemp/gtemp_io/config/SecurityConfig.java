@@ -8,12 +8,12 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -30,31 +30,57 @@ public class SecurityConfig {
         this.jwtAuthFilter = jwtAuthFilter;
     }
 
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/api/users/register").permitAll()
-                        .requestMatchers("/api/login").permitAll()
-                        .requestMatchers("/api/homepage").permitAll()
-                        .requestMatchers("/api/templates/{id}").permitAll()
-                        .requestMatchers("/{id}/images").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/comments").permitAll()
-
-                        .requestMatchers("/uploads/**").permitAll()
-
-//                         .requestMatchers(HttpMethod.POST, "/api/comments").authenticated()
-                        // ========== PROTECTED ENDPOINTS (Require JWT) ==========
-                        // upload, edit, add to wallet, download templates
-                        // Catch-all: Protect everything else
-                        .anyRequest().authenticated()
-                )
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .csrf(AbstractHttpConfigurer::disable)
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .authorizeHttpRequests(authz -> authz
+                        // ========== SPECIFIC PUBLIC ENDPOINTS ==========
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/login").permitAll()
+                        .requestMatchers("/api/users/register").permitAll()
+                        .requestMatchers("/api/homepage").permitAll()
+
+                        // Templates - public
+                        .requestMatchers("/api/templates/**").permitAll()
+                        .requestMatchers("/api/templates/*/images").permitAll()
+                        .requestMatchers("/{id}/images").permitAll()
+
+                        // Comments - public for GET
+                        .requestMatchers(HttpMethod.GET, "/api/comments/**").permitAll()
+
+                        // Uploads - public
+                        .requestMatchers("/uploads/**").permitAll()
+
+                        // Test endpoints - public
+                        .requestMatchers("/api/test/**").permitAll()
+                        .requestMatchers("/api/debug/**").permitAll()
+
+                        // CORS preflight
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // Static resources
+                        .requestMatchers("/css/**", "/js/**", "/images/**", "/static/**").permitAll()
+
+                        // ========== PROTECTED ENDPOINTS ==========
+                        // Comments POST/PUT/DELETE - require auth
+                        .requestMatchers(HttpMethod.POST, "/api/comments/**").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/comments/**").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/comments/**").authenticated()
+
+                        // Wishlist - all require auth
+                        .requestMatchers("/api/wishlist/**").authenticated()
+
+                        // ========== CATCH-ALL ==========
+                        // Everything else requires authentication
+                        .anyRequest().authenticated()
+                );
 
         return http.build();
     }
@@ -69,22 +95,10 @@ public class SecurityConfig {
                 "http://localhost:5178"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(Arrays.asList(
-                "Authorization",
-                "Content-Type",
-                "X-Requested-With",
-                "Accept",
-                "Origin",
-                "Access-Control-Request-Method",
-                "Access-Control-Request-Headers"
-        ));
-        configuration.setExposedHeaders(Arrays.asList(
-                "Access-Control-Allow-Origin",
-                "Access-Control-Allow-Credentials",
-                "Authorization"
-        ));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setExposedHeaders(Arrays.asList("Authorization"));
         configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L); // Cache CORS preflight for 1 hour
+        configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

@@ -8,34 +8,32 @@ import org.springframework.stereotype.Component;
 public class SecurityUtil {
 
     public Long getCurrentUserId() {
+        System.out.println("=== SecurityUtil.getCurrentUserId() ===");
+
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        if (authentication == null ||
-                !authentication.isAuthenticated() ||
-                "anonymousUser".equals(authentication.getPrincipal())) {
-            throw new RuntimeException("User not authenticated");
+        if (authentication == null) {
+            System.out.println("Authentication is NULL - JWT filter didn't set auth");
+            throw new RuntimeException("Not authenticated");
         }
 
-        String userIdStr = authentication.getName();
-        try {
-            return Long.parseLong(userIdStr);
-        } catch (NumberFormatException e) {
-            throw new RuntimeException("Invalid user ID format: " + userIdStr);
-        }
-    }
+        Object principal = authentication.getPrincipal();
+        System.out.println("Principal: " + principal);
+        System.out.println("Principal class: " + principal.getClass().getName());
 
-    public boolean isAuthenticated() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        return authentication != null &&
-                authentication.isAuthenticated() &&
-                !"anonymousUser".equals(authentication.getPrincipal());
-    }
-
-    public Long getCurrentUserIdOrNull() {
-        try {
-            return getCurrentUserId();
-        } catch (RuntimeException e) {
-            return null;
+        if (principal instanceof String) {
+            System.out.println("Principal is String: '" + principal + "'");
+            try {
+                return Long.parseLong((String) principal);
+            } catch (NumberFormatException e) {
+                throw new RuntimeException("Invalid user ID format: " + principal);
+            }
+        } else if (principal instanceof Long) {
+            System.out.println("Principal is Long: " + principal);
+            return (Long) principal;
+        } else {
+            System.out.println("Unexpected principal type: " + principal.getClass());
+            throw new RuntimeException("Invalid user ID format: " + principal);
         }
     }
 }
